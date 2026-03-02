@@ -9,6 +9,69 @@ const fetch = require('node-fetch');
 const http = require('http');
 const https = require('https');
 const { API_CONFIG } = require('./apiConfig');
+const httpAgent = new http.Agent({ keepAlive: false });
+const httpsAgent = new https.Agent({ keepAlive: false });
+
+// Browser profiles for header randomization
+const BROWSER_PROFILES = [
+    {
+        browser: 'Chrome',
+        versions: [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135],
+        platforms: [
+            { os: 'Windows NT 10.0; Win64; x64', secPlatform: '"Windows"' },
+            { os: 'Windows NT 11.0; Win64; x64', secPlatform: '"Windows"' },
+            { os: 'Macintosh; Intel Mac OS X 10_15_7', secPlatform: '"macOS"' },
+            { os: 'X11; Linux x86_64', secPlatform: '"Linux"' }
+        ],
+        buildSecUa: (ver) => `"Not:A-Brand";v="99", "Google Chrome";v="${ver}", "Chromium";v="${ver}"`
+    },
+    {
+        browser: 'Brave',
+        versions: [132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145],
+        platforms: [
+            { os: 'Windows NT 10.0; Win64; x64', secPlatform: '"Windows"' },
+            { os: 'Windows NT 11.0; Win64; x64', secPlatform: '"Windows"' },
+            { os: 'Macintosh; Intel Mac OS X 10_15_7', secPlatform: '"macOS"' }
+        ],
+        buildSecUa: (ver) => `"Not:A-Brand";v="99", "Brave";v="${ver}", "Chromium";v="${ver}"`
+    },
+    {
+        browser: 'Edge',
+        versions: [124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135],
+        platforms: [
+            { os: 'Windows NT 10.0; Win64; x64', secPlatform: '"Windows"' },
+            { os: 'Windows NT 11.0; Win64; x64', secPlatform: '"Windows"' },
+            { os: 'Macintosh; Intel Mac OS X 10_15_7', secPlatform: '"macOS"' }
+        ],
+        buildSecUa: (ver) => `"Not A(B)rand";v="8", "Chromium";v="${ver}", "Microsoft Edge";v="${ver}"`
+    }
+];
+
+/**
+ * Generates randomized browser-like headers to avoid server-side bot detection.
+ * Rotates browser type, version, OS, and related sec-* headers on every call.
+ * @returns {Object} Headers object
+ */
+function generateBrowserHeaders() {
+    const profile = BROWSER_PROFILES[Math.floor(Math.random() * BROWSER_PROFILES.length)];
+    const version = profile.versions[Math.floor(Math.random() * profile.versions.length)];
+    const platform = profile.platforms[Math.floor(Math.random() * profile.platforms.length)];
+
+    return {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.7',
+        'Origin': API_CONFIG.ORIGIN,
+        'Referer': `${API_CONFIG.ORIGIN}/`,
+        'User-Agent': `Mozilla/5.0 (${platform.os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version}.0.0.0 Safari/537.36`,
+        'sec-ch-ua': profile.buildSecUa(version),
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': platform.secPlatform,
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
+        'sec-gpc': '1',
+    };
+}
 
 /**
  * Builds MD5 signed form data for simple player API calls
@@ -51,8 +114,14 @@ function encodeData(data) {
 async function fetchPost(url, body) {
     const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            ...generateBrowserHeaders()
+        },
+        body,
+        // disable keep-alive and add a timeout so we don't hang on stale sockets
+        agent: url.startsWith('https') ? httpsAgent : httpAgent,
+        timeout: 15000
     });
 
     if (response.status === 429) {
@@ -80,6 +149,7 @@ async function nativePost(url, payload, label) {
         const postData = encodeData(payload);
 
         const urlObject = new URL(url);
+        const browserHeaders = generateBrowserHeaders();
         const options = {
             hostname: urlObject.hostname,
             port: urlObject.port || (urlObject.protocol === 'https:' ? 443 : 80),
@@ -88,8 +158,7 @@ async function nativePost(url, payload, label) {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Content-Length': Buffer.byteLength(postData),
-                Accept: 'application/json, text/plain, */*',
-                Origin: API_CONFIG.ORIGIN
+                ...browserHeaders
             }
         };
 

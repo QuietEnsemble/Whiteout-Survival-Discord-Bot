@@ -126,7 +126,7 @@ async function handleEmojiReloadConfirmButton(interaction) {
 		});
 
 		// GitHub repository with default emoji pack JSON:
-		const downloadUrl = 'https://raw.githubusercontent.com/whiteout-project/testemojis/main/default_pack.json';
+		const downloadUrl = 'https://raw.githubusercontent.com/whiteout-project/Whiteout-Survival-Discord-Bot/main/src/functions/Settings/theme/default_pack.json';
 
 		const tempDir = path.join(__dirname, '../../../temp');
 		await fs.promises.mkdir(tempDir, { recursive: true });

@@ -5,7 +5,7 @@
  */
 
 const API_CONFIG = {
-    SECRET: process.env.API_SECRET || 'tB87#kPtkxqOS2',
+    SECRET: 'tB87#kPtkxqOS2',
     API_URL: 'https://wos-giftcode-api.centurygame.com/api/player', // Alias for PLAYER_URL
     PLAYER_URL: 'https://wos-giftcode-api.centurygame.com/api/player',
     GIFT_CODE_URL: 'https://wos-giftcode-api.centurygame.com/api/gift_code',
@@ -20,7 +20,7 @@ const API_CONFIG = {
 };
 
 const GIFT_CODE_API_CONFIG = {
-    API_KEY: process.env.GIFT_CODE_API_KEY || 'super_secret_bot_token_nobody_will_ever_find',
+    API_KEY: 'super_secret_bot_token_nobody_will_ever_find',
     API_URL: 'http://gift-code-api.whiteout-bot.com/giftcode_api.php',
 };
 
