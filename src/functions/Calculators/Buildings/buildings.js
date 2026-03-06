@@ -230,20 +230,21 @@ function aggregateEntries(entries) {
 
 /**
  * Appends requirement lines to a `lines` array.
- * Furnace levels are shown via `getFurnaceReadable`; all others use the raw number.
+ * Furnace levels are shown via `getFurnaceReadable` with localisation; all others use the raw number.
  * @param {string[]} lines - mutated in place
  * @param {{ [bKey: string]: number }} reqs
  * @param {{ [bKey: string]: string }} buildingNames
  * @param {string} headerKey      - Localised header string
  * @param {string} levelTemplate  - Localised level template containing `{level}`
+ * @param {object} lang           - Language object for localised furnace level display
  */
-function appendRequirementLines(lines, reqs, buildingNames, headerKey, levelTemplate) {
+function appendRequirementLines(lines, reqs, buildingNames, headerKey, levelTemplate, lang) {
     const reqEntries = Object.entries(reqs);
     if (!reqEntries.length) return;
     lines.push(headerKey);
     for (const [bKey, bLevel] of reqEntries) {
         const bName      = buildingNames[bKey] || bKey;
-        const bLevelDisp = bKey === 'furnace' ? getFurnaceReadable(bLevel) : bLevel;
+        const bLevelDisp = getFurnaceReadable(bLevel, lang);
         lines.push(`  - ${bName}: ${levelTemplate.replace('{level}', bLevelDisp)}`);
     }
 }
@@ -452,7 +453,7 @@ function buildCopySummary(entries, buffs, lang) {
     if (hasAnyBuff(buffs)) lines.push(lc.results.withBuffs.replace('{time}', formatSeconds(reducedSeconds)));
 
     // Building requirements
-    appendRequirementLines(lines, maxBuildingReqs, buildingNames, lc.results.requirements, lc.results.requirementLevel);
+    appendRequirementLines(lines, maxBuildingReqs, buildingNames, lc.results.requirements, lc.results.requirementLevel, lang);
 
     // Applied buffs
     if (hasAnyBuff(buffs)) {
@@ -673,7 +674,7 @@ function buildResultsContainer(entries, buffs, userId, lang) {
     if (buffActive) lines.push(lc.results.withBuffs.replace('{time}', formatSeconds(reducedSeconds)));
 
     // Building requirements
-    appendRequirementLines(lines, maxBuildingReqs, buildingNames, lc.results.requirements, lc.results.requirementLevel);
+    appendRequirementLines(lines, maxBuildingReqs, buildingNames, lc.results.requirements, lc.results.requirementLevel, lang);
 
     // Applied buffs summary
     if (buffActive) {
