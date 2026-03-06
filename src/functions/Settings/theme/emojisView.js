@@ -68,12 +68,12 @@ function getEmojiDisplay(entry) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiViewButton(interaction) {
-	const { adminData, lang } = getUserInfo(interaction.user.id);
+	const { userData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-		if (!adminData) {
+		if (!userData) {
 			return await interaction.reply({
 				content: lang.common.noPermission,
 				ephemeral: true

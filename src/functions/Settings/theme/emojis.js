@@ -123,13 +123,6 @@ async function handleEmojiThemeButton(interaction) {
 		const expectedUserId = interaction.customId.split('_')[2];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-		if (!adminData) {
-			return await interaction.reply({
-				content: lang.common.noPermission,
-				ephemeral: true
-			});
-		}
-
 		const components = createEmojiThemeContainer(interaction.user.id, lang, adminData);
 
 		await interaction.update({

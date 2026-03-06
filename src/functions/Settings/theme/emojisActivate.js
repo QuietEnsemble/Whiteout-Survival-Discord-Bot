@@ -36,7 +36,7 @@ function createEmojiActivateButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiActivateButton(interaction) {
-	const { adminData, userData, lang } = getUserInfo(interaction.user.id);
+	const { userData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
