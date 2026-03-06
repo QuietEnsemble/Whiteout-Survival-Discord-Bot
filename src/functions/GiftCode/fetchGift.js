@@ -180,10 +180,11 @@ class GiftCodeAPI {
                         // Code is still valid and can be used - update last_validated timestamp
                         giftCodeQueries.updateLastValidated(codeData.gift_code);
                     } else {
-                        // Code is now invalid/expired/used - mark it and remove from API
+                        // Code is now invalid/expired/used - delete it and its usage history, then remove from API
+                        // This allows the code to be re-added and users to redeem it again if it becomes active
                         const message = validationResult?.message || validationResult?.results?.[0]?.message || 'Unknown error';
                         const status = validationResult?.results?.[0]?.status || 'UNKNOWN';
-                        giftCodeQueries.updateGiftCodeStatus('invalid', codeData.gift_code);
+                        giftCodeQueries.removeGiftCode(codeData.gift_code);
 
                         // Remove from API
                         try {

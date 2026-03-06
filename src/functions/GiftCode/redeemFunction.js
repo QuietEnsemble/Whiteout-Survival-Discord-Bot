@@ -1009,12 +1009,13 @@ async function executeRedeemOperation(processId) {
                 abortReason = outcome.status;
                 console.warn(`Stopping redeem process ${processId} due to status "${outcome.status}"`);
 
-                // Mark gift code as invalid if it expired/was used/not found during redemption
+                // Delete gift code and its usage history if it expired/was used/not found during redemption
+                // This allows the code to be re-added and users to redeem it again if it becomes active
                 if (outcome.status === 'USED' || outcome.status === 'TIME ERROR' || outcome.status === 'CDK NOT FOUND') {
                     try {
-                        giftCodeQueries.updateGiftCodeStatus('invalid', item.giftCode);
+                        giftCodeQueries.removeGiftCode(item.giftCode);
                     } catch (updateError) {
-                        await handleError(null, null, updateError, 'updateGiftCodeVipStatus', false);
+                        await handleError(null, null, updateError, 'removeInvalidGiftCode', false);
                     }
                 }
 
