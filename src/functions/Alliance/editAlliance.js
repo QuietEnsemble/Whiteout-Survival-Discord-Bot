@@ -4,8 +4,8 @@ const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { restartAutoRefresh } = require('./refreshAlliance');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator, parseRefreshInterval, formatRefreshInterval } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, parseRefreshInterval, formatRefreshInterval } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 /**
  * Creates an edit alliance button
@@ -18,7 +18,7 @@ function createEditAllianceButton(userId, lang = {}) {
         .setCustomId(`edit_alliance_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.editAlliance)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1008'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1008'));
 }
 
 /**
@@ -27,7 +27,7 @@ function createEditAllianceButton(userId, lang = {}) {
  */
 async function handleEditAllianceButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // edit_alliance_userId
@@ -78,7 +78,7 @@ async function handleEditAllianceButton(interaction) {
         await showAllianceSelection(interaction, 0, lang, alliances);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAllianceButton');
+        await handleError(interaction, lang, error, 'handleEditAllianceButton');
     }
 }
 
@@ -145,7 +145,7 @@ async function showAllianceSelection(interaction, page = 0, lang = {}, alliances
                     .replace('{playerCount}', playerCount.toString())
                     .replace('{alliancePriority}', Math.floor(alliance.priority).toString())
                 )
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001'))
         );
     });
 
@@ -203,7 +203,7 @@ async function showAllianceSelection(interaction, page = 0, lang = {}, alliances
  */
 async function handleEditAlliancePagination(interaction) {
     // Get user's language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -215,7 +215,7 @@ async function handleEditAlliancePagination(interaction) {
         await showAllianceSelection(interaction, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAlliancePagination');
+        await handleError(interaction, lang, error, 'handleEditAlliancePagination');
     }
 }
 
@@ -225,7 +225,7 @@ async function handleEditAlliancePagination(interaction) {
  */
 async function handleEditAllianceSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -320,7 +320,7 @@ async function handleEditAllianceSelection(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAllianceSelection');
+        await handleError(interaction, lang, error, 'handleEditAllianceSelection');
     }
 }
 
@@ -330,7 +330,7 @@ async function handleEditAllianceSelection(interaction) {
  */
 async function handleEditAllianceModal(interaction) {
     // Get user's language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract alliance ID and user ID from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -451,15 +451,15 @@ async function handleEditAllianceModal(interaction) {
                 try {
                     await restartAutoRefresh(allianceId);
                 } catch (autoRefreshError) {
-                    await sendError(interaction, lang, autoRefreshError, 'handleEditAllianceModal_restartAutoRefresh', false);
+                    await handleError(interaction, lang, autoRefreshError, 'handleEditAllianceModal_restartAutoRefresh', false);
                 }
             }
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleEditAllianceModal_databaseUpdate');
+            await handleError(interaction, lang, dbError, 'handleEditAllianceModal_databaseUpdate');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAllianceModal');
+        await handleError(interaction, lang, error, 'handleEditAllianceModal');
     }
 }
 
@@ -469,7 +469,7 @@ async function handleEditAllianceModal(interaction) {
  */
 async function handleEditAllianceChannelSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract alliance ID and user ID from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -573,11 +573,11 @@ async function handleEditAllianceChannelSelection(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleEditAllianceChannelSelection_databaseUpdate');
+            await handleError(interaction, lang, dbError, 'handleEditAllianceChannelSelection_databaseUpdate');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAllianceChannelSelection');
+        await handleError(interaction, lang, error, 'handleEditAllianceChannelSelection');
     }
 }
 

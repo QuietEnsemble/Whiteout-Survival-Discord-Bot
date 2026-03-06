@@ -13,8 +13,10 @@ const { createNotificationButton } = require('./createNotification');
 const { createEditNotificationButton } = require('./editNotification');
 const { createDeleteNotificationButton } = require('./deleteNotification');
 const { createTemplateLibraryButton } = require('./templateLibrary');
-const { getAdminLang, assertUserMatches, sendError } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
+const { checkFeatureAccess } = require('../utility/checkAccess');
+const { PERMISSIONS } = require('../Settings/admin/permissions');
 
 /**
  * Creates a notification management button for the main panel
@@ -27,7 +29,7 @@ function createNotificationManagementButton(userId, lang = {}) {
         .setCustomId(`notification_management_${userId}`)
         .setLabel(lang.panel.mainPage.buttons.notification)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1022'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1022'));
 }
 
 /**
@@ -38,7 +40,10 @@ function createNotificationManagementButton(userId, lang = {}) {
  */
 function createNotificationContainer(interaction) {
 
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
+
+    const hasServerPermission = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+    const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
     const returnedBackButton = createBackToPanelButton(interaction.user.id, lang);
     const createNotificationButtonInstance = createNotificationButton(interaction.user.id, lang);
@@ -46,8 +51,10 @@ function createNotificationContainer(interaction) {
     const deleteNotificationButtonInstance = createDeleteNotificationButton(interaction.user.id, lang);
     const templateLibraryButtonInstance = createTemplateLibraryButton(interaction.user.id, lang);
 
-    if (!adminData) {
-        returnedBackButton.setDisabled(true);
+    if (!hasServerPermission && !hasPrivateFeature) {
+        createNotificationButtonInstance.setDisabled(true);
+        editNotificationButtonInstance.setDisabled(true);
+        deleteNotificationButtonInstance.setDisabled(true)
     }
 
 
@@ -97,7 +104,7 @@ function createNotificationContainer(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleNotificationManagementButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[2];
@@ -111,7 +118,7 @@ async function handleNotificationManagementButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleNotificationManagementButton');
+        await handleError(interaction, lang, error, 'handleNotificationManagementButton');
     }
 }
 

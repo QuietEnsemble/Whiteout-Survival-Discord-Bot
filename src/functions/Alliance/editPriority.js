@@ -1,9 +1,9 @@
 const { ButtonBuilder, ButtonStyle, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, ContainerBuilder, MessageFlags, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
-const { allianceQueries, systemLogQueries, playerQueries } = require('../utility/database');
+const { allianceQueries, playerQueries } = require('../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji, replaceEmojiPlaceholders } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji, replaceEmojiPlaceholders } = require('./../utility/emojis');
 
 
 /**
@@ -17,7 +17,7 @@ function createEditPriorityButton(userId, lang = {}) {
         .setCustomId(`edit_priority_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.editPriority)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1028'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1028'));
 }
 
 /**
@@ -26,7 +26,7 @@ function createEditPriorityButton(userId, lang = {}) {
  */
 async function handleEditPriorityButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2];
@@ -60,7 +60,7 @@ async function handleEditPriorityButton(interaction) {
         await showPrioritySelectPage(interaction, alliances, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditPriorityButton');
+        await handleError(interaction, lang, error, 'handleEditPriorityButton');
     }
 }
 
@@ -70,7 +70,7 @@ async function handleEditPriorityButton(interaction) {
  */
 async function handleEditPriorityPagination(interaction) {
     // Get admin language preference first
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -98,7 +98,7 @@ async function handleEditPriorityPagination(interaction) {
         await showPrioritySelectPage(interaction, alliances, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditPriorityPagination');
+        await handleError(interaction, lang, error, 'handleEditPriorityPagination');
     }
 }
 
@@ -204,7 +204,7 @@ async function showPrioritySelectPage(interaction, alliances, page, lang) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handlePriorityAllianceSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const selectedAllianceId = parseInt(interaction.values[0]);
         const alliance = allianceQueries.getAllianceById(selectedAllianceId);
@@ -221,7 +221,7 @@ async function handlePriorityAllianceSelection(interaction) {
         await showPriorityEditInterface(interaction, alliance, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePriorityAllianceSelection');
+        await handleError(interaction, lang, error, 'handlePriorityAllianceSelection');
     }
 }
 
@@ -246,7 +246,7 @@ async function showPriorityEditInterface(interaction, alliance, lang) {
 
     // Add context alliances
     const contextList = contextAlliances.map(a => {
-        const indicator = a.id === alliance.id ? replaceEmojiPlaceholders('{emoji.1016} ', getEmojiMapForAdmin(interaction.user.id)) : '   ';
+        const indicator = a.id === alliance.id ? replaceEmojiPlaceholders('{emoji.1016} ', getEmojiMapForUser(interaction.user.id)) : '   ';
         return `\u200E${indicator}**${a.priority}.** ${a.name}`;
     }).join('\n');
 
@@ -257,25 +257,25 @@ async function showPriorityEditInterface(interaction, alliance, lang) {
         .setCustomId(`priority_highest_${alliance.id}`)
         .setLabel(lang.alliance.editPriority.buttons.highest)
         .setStyle(ButtonStyle.Success)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1048'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1048'));
 
     const customButton = new ButtonBuilder()
         .setCustomId(`priority_custom_${alliance.id}`)
         .setLabel(lang.alliance.editPriority.buttons.custom)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1043'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1043'));
 
     const lowestButton = new ButtonBuilder()
         .setCustomId(`priority_lowest_${alliance.id}`)
         .setLabel(lang.alliance.editPriority.buttons.lowest)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1007'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1007'));
 
     const backButton = new ButtonBuilder()
         .setCustomId(`back_to_priority_select_${interaction.user.id}`)
         .setLabel(lang.alliance.editPriority.buttons.backToSelect)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1019'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1019'));
 
     actionRow.addComponents(highestButton, customButton, lowestButton, backButton);
 
@@ -315,12 +315,12 @@ async function showPriorityEditInterface(interaction, alliance, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handlePriorityHighest(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const allianceId = parseInt(interaction.customId.split('_')[2]);
         await updateAlliancePriority(interaction, allianceId, 1);
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePriorityHighest');
+        await handleError(interaction, lang, error, 'handlePriorityHighest');
     }
 }
 
@@ -329,7 +329,7 @@ async function handlePriorityHighest(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handlePriorityLowest(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const allianceId = parseInt(interaction.customId.split('_')[2]);
         const allAlliances = allianceQueries.getAllAlliances();
@@ -337,7 +337,7 @@ async function handlePriorityLowest(interaction) {
 
         await updateAlliancePriority(interaction, allianceId, maxPriority);
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePriorityLowest');
+        await handleError(interaction, lang, error, 'handlePriorityLowest');
     }
 }
 
@@ -346,7 +346,7 @@ async function handlePriorityLowest(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handlePriorityCustom(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const allianceId = interaction.customId.split('_')[2];
         const allAlliances = allianceQueries.getAllAlliances();
@@ -375,7 +375,7 @@ async function handlePriorityCustom(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePriorityCustom');
+        await handleError(interaction, lang, error, 'handlePriorityCustom');
     }
 }
 
@@ -384,7 +384,7 @@ async function handlePriorityCustom(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction 
  */
 async function handlePriorityCustomModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const allianceId = parseInt(interaction.customId.split('_')[3]);
         const priorityValue = interaction.fields.getTextInputValue('priority_value');
@@ -409,7 +409,7 @@ async function handlePriorityCustomModal(interaction) {
         await updateAlliancePriority(interaction, allianceId, finalPriority);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePriorityCustomModal');
+        await handleError(interaction, lang, error, 'handlePriorityCustomModal');
     }
 }
 
@@ -420,7 +420,7 @@ async function handlePriorityCustomModal(interaction) {
  * @param {number} newPriority - New priority value
  */
 async function updateAlliancePriority(interaction, allianceId, newPriority) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
 
         const alliance = allianceQueries.getAllianceById(allianceId);
@@ -475,21 +475,6 @@ async function updateAlliancePriority(interaction, allianceId, newPriority) {
             allianceQueries.updateAlliancePriority(item.id, item.priority);
         }
 
-        // Log the priority change
-        systemLogQueries.addLog(
-            'alliance_priority',
-            `Alliance priority updated: ${alliance.name}`,
-            JSON.stringify({
-                alliance_id: allianceId,
-                alliance_name: alliance.name,
-                old_priority: oldPriority,
-                new_priority: newPriority,
-                updated_by: interaction.user.id,
-                updated_by_tag: interaction.user.tag,
-                function: 'updateAlliancePriority'
-            })
-        );
-
         // Get updated alliance data and show interface
         const updatedAlliance = allianceQueries.getAllianceById(allianceId);
         await showPriorityEditInterface(interaction, updatedAlliance, lang);
@@ -504,7 +489,7 @@ async function updateAlliancePriority(interaction, allianceId, newPriority) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'updateAlliancePriority');
+        await handleError(interaction, lang, error, 'updateAlliancePriority');
     }
 }
 
@@ -513,7 +498,7 @@ async function updateAlliancePriority(interaction, allianceId, newPriority) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleBackToPrioritySelect(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // back_to_priority_select_userId
@@ -536,7 +521,7 @@ async function handleBackToPrioritySelect(interaction) {
         await showPrioritySelectPage(interaction, alliances, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleBackToPrioritySelect');
+        await handleError(interaction, lang, error, 'handleBackToPrioritySelect');
     }
 }
 

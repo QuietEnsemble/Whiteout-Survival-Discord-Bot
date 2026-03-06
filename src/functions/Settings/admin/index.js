@@ -2,7 +2,7 @@
 const { PERMISSIONS, getPermissionDescriptions } = require('./permissions');
 
 // Export main admin management
-const { createManageAdminsButton, handleManageAdminsButton } = require('./adminManagement');
+const { createManageAdminsButton, handleManageAdminsButton } = require('./admins');
 
 // Export back to settings functionality
 const { createBackToSettingsButton, handleBackToSettingsButton } = require('../backToSettings');

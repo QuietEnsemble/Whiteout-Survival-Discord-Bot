@@ -1,6 +1,6 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, ContainerBuilder, MessageFlags, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../../utility/emojis');
 const { settingsQueries } = require('../../utility/database');
 const { getAuthenticatedDriveClient } = require('./backupCreate');
 const { findOrCreateBackupFolder, listBackupFiles } = require('./backupView');
@@ -19,7 +19,7 @@ function createBackupRestoreButton(userId, lang = {}) {
 		.setCustomId(`db_backup_restore_${userId}`)
 		.setLabel(lang.settings.backup.mainPage.buttons.restore)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033'));
 }
 
 /**
@@ -27,7 +27,7 @@ function createBackupRestoreButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleBackupRestoreButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -95,7 +95,7 @@ async function handleBackupRestoreButton(interaction) {
 			throw error;
 		}
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleBackupRestoreButton');
+		await handleError(interaction, lang, error, 'handleBackupRestoreButton');
 	}
 }
 
@@ -130,7 +130,7 @@ async function showRestoreBackupSelection(interaction, lang, backups) {
 				.setCustomId(`db_backup_restore_confirm_${userId}_${backup.id}`)
 				.setLabel(`${index + 1}`)
 				.setStyle(ButtonStyle.Secondary)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033'));
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033'));
 
 			buttons.push(restoreBtn);
 		}
@@ -161,7 +161,7 @@ async function showRestoreBackupSelection(interaction, lang, backups) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleRestoreConfirmButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[4];
@@ -182,13 +182,13 @@ async function handleRestoreConfirmButton(interaction) {
 			.setCustomId(`db_backup_restore_execute_${expectedUserId}_${fileId}`)
 			.setLabel(lang.settings.backup.backupRestore.buttons.confirm)
 			.setStyle(ButtonStyle.Secondary)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(expectedUserId), '1004'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(expectedUserId), '1004'));
 
 		const cancelBtn = new ButtonBuilder()
 			.setCustomId(`db_backup_restore_cancel_${expectedUserId}`)
 			.setLabel(lang.settings.backup.backupRestore.buttons.cancel)
 			.setStyle(ButtonStyle.Secondary)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(expectedUserId), '1051'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(expectedUserId), '1051'));
 
 		const actionRow = new ActionRowBuilder().addComponents(executeBtn, cancelBtn);
 
@@ -213,7 +213,7 @@ async function handleRestoreConfirmButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleRestoreConfirmButton');
+		await handleError(interaction, lang, error, 'handleRestoreConfirmButton');
 	}
 }
 
@@ -222,7 +222,7 @@ async function handleRestoreConfirmButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleRestoreCancelButton(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 
 		if (!(await assertUserMatches(interaction, interaction.customId.split('_')[4], lang))) return;
@@ -241,7 +241,7 @@ async function handleRestoreCancelButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleRestoreCancelButton');
+		await handleError(interaction, lang, error, 'handleRestoreCancelButton');
 	}
 }
 
@@ -250,7 +250,7 @@ async function handleRestoreCancelButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleRestoreExecuteButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[4];
@@ -421,7 +421,7 @@ async function handleRestoreExecuteButton(interaction) {
 			}
 		}, 2000); // 2 second delay to allow message to send
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleRestoreExecuteButton');
+		await handleError(interaction, lang, error, 'handleRestoreExecuteButton');
 	}
 }
 

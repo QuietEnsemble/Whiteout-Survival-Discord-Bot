@@ -18,9 +18,9 @@ const { allianceQueries } = require('../utility/database');
 const { createProcess, updateProcessProgress, getProcessById } = require('../Processes/createProcesses');
 const { queueManager } = require('../Processes/queueManager');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
 const { parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 /**
  * Creates the add player button for the player management panel
@@ -33,7 +33,7 @@ function createAddPlayerButton(userId, lang = {}) {
         .setCustomId(`add_player_${userId}`)
         .setLabel(lang.players.mainPage.buttons.addPlayer)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 /**
@@ -42,7 +42,7 @@ function createAddPlayerButton(userId, lang = {}) {
  */
 async function handleAddPlayerButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // add_player_userId
@@ -81,7 +81,7 @@ async function handleAddPlayerButton(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddPlayerButton');
+        await handleError(interaction, lang, error, 'handleAddPlayerButton');
     }
 }
 
@@ -116,7 +116,7 @@ async function getAlliancesForUser(adminData) {
 
         return [];
     } catch (error) {
-        await sendError(null, null, error, 'getAlliancesForUser', false);
+        await handleError(null, null, error, 'getAlliancesForUser', false);
         return [];
     }
 }
@@ -155,7 +155,7 @@ function createAllianceSelectionContainer(interaction, alliances, lang, page = 0
  */
 async function handleAddPlayerPagination(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -182,7 +182,7 @@ async function handleAddPlayerPagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddPlayerPagination');
+        await handleError(interaction, lang, error, 'handleAddPlayerPagination');
     }
 }
 
@@ -192,7 +192,7 @@ async function handleAddPlayerPagination(interaction) {
  */
 async function handleAllianceSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // alliance_select_add_player_userId
@@ -225,7 +225,7 @@ async function handleAllianceSelection(interaction) {
             .setCustomId(`open_player_form_${alliance.id}_${interaction.user.id}`)
             .setLabel(lang.players.addPlayer.buttons.inputPlayerId)
             .setStyle(ButtonStyle.Primary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1021'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1021'));
 
         const components = [
             new ActionRowBuilder().addComponents(formButton),
@@ -257,7 +257,7 @@ async function handleAllianceSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceSelection');
+        await handleError(interaction, lang, error, 'handleAllianceSelection');
     }
 }
 
@@ -267,7 +267,7 @@ async function handleAllianceSelection(interaction) {
  */
 async function handlePlayerFormButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract alliance ID and user ID from custom ID
         const parts = interaction.customId.split('_'); // open_player_form_allianceId_userId
@@ -318,7 +318,7 @@ async function handlePlayerFormButton(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePlayerFormButton');
+        await handleError(interaction, lang, error, 'handlePlayerFormButton');
     }
 }
 
@@ -328,7 +328,7 @@ async function handlePlayerFormButton(interaction) {
  */
 async function handlePlayerIdModal(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract alliance ID and user ID from custom ID
         const parts = interaction.customId.split('_'); // player_id_modal_allianceId_userId
@@ -387,7 +387,7 @@ async function handlePlayerIdModal(interaction) {
             try {
                 targetChannel = await interaction.client.channels.fetch(alliance.channel_id);
             } catch (error) {
-                await sendError(null, lang, error, 'fetchAllianceChannel', false);
+                await handleError(null, lang, error, 'fetchAllianceChannel', false);
                 targetChannel = interaction.channel;
             }
         } else {
@@ -437,7 +437,7 @@ async function handlePlayerIdModal(interaction) {
         await queueManager.manageQueue(processResult);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePlayerIdModal');
+        await handleError(interaction, lang, error, 'handlePlayerIdModal');
     }
 }
 
@@ -487,7 +487,7 @@ function sanitizePlayerIds(rawInput) {
  */
 function createProcessResponseEmbed(processResult, queueResult, alliance, lang, interaction, existingPlayers = []) {
     const playerCount = processResult.player_ids ? processResult.player_ids.split(',').length : 0;
-    const emojiMap = getEmojiMapForAdmin(interaction.user.id);
+    const emojiMap = getEmojiMapForUser(interaction.user.id);
     let color = "#3498db"; // Default blue
     let statusEmoji = emojiMap['1021'];
     let statusMessage = lang.players.addPlayer.content.status.queued;

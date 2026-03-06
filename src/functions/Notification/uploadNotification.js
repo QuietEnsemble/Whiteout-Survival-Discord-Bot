@@ -17,15 +17,15 @@ const https = require('https');
 const { notificationQueries, adminLogQueries } = require('../utility/database');
 const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
 const { showEmbedEditor } = require('./notificationEditor');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 /**
  * Handle Upload Notification button - shows modal with file upload
  */
 async function handleUploadNotificationButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[2];
@@ -51,7 +51,7 @@ async function handleUploadNotificationButton(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleUploadNotificationButton');
+        await handleError(interaction, lang, error, 'handleUploadNotificationButton');
     }
 }
 
@@ -186,7 +186,7 @@ function downloadFile(url) {
  * Handle file upload modal submission - validates and shows type selection
  */
 async function handleFileUploadModalSubmit(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -245,13 +245,13 @@ async function handleFileUploadModalSubmit(interaction) {
             .setCustomId(`template_import_type_server_${interaction.user.id}_${timestamp}`)
             .setLabel(lang.notification.uploadNotification.buttons.serverNotification)
             .setStyle(ButtonStyle.Primary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022'));
 
         const privateButton = new ButtonBuilder()
             .setCustomId(`template_import_type_private_${interaction.user.id}_${timestamp}`)
             .setLabel(lang.notification.uploadNotification.buttons.privateNotification)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1029'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1029'));
 
         const buttonRow = new ActionRowBuilder().addComponents(serverButton, privateButton);
 
@@ -288,7 +288,7 @@ async function handleFileUploadModalSubmit(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleFileUploadModalSubmit');
+        await handleError(interaction, lang, error, 'handleFileUploadModalSubmit');
     }
 }
 
@@ -296,7 +296,7 @@ async function handleFileUploadModalSubmit(interaction) {
  * Handle import type selection (server or private)
  */
 async function handleImportTypeSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -333,7 +333,7 @@ async function handleImportTypeSelection(interaction) {
         await showImportModal(interaction, type, jsonData, timestamp);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleImportTypeSelection');
+        await handleError(interaction, lang, error, 'handleImportTypeSelection');
     }
 }
 
@@ -341,7 +341,7 @@ async function handleImportTypeSelection(interaction) {
  * Show import modal with name, date, and time
  */
 async function showImportModal(interaction, type, jsonData, timestamp) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     // Get current date and time in UTC
     const now = new Date();
@@ -399,7 +399,7 @@ async function showImportModal(interaction, type, jsonData, timestamp) {
  * Handle import modal submission - creates notification and opens editor
  */
 async function handleImportModalSubmit(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -531,11 +531,11 @@ async function handleImportModalSubmit(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleImportModalSubmit_createNotification');
+            await handleError(interaction, lang, dbError, 'handleImportModalSubmit_createNotification');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleImportModalSubmit');
+        await handleError(interaction, lang, error, 'handleImportModalSubmit');
     }
 }
 

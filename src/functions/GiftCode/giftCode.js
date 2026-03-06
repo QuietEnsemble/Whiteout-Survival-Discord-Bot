@@ -8,8 +8,8 @@ const { createViewGiftButton } = require('./viewGift');
 const { createToggleAutoRedeemButton } = require('./autoRedeem');
 const { createGiftCodeChannelButton } = require('./giftCodeChannel');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 /**
  * Creates a gift code management button
@@ -22,7 +22,7 @@ function createGiftCodeManagementButton(userId, lang = {}) {
         .setCustomId(`gift_code_management_${userId}`)
         .setLabel(lang.panel.mainPage.buttons.giftCode)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1013'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1013'));
 }
 
 /**
@@ -31,7 +31,7 @@ function createGiftCodeManagementButton(userId, lang = {}) {
  */
 async function handleGiftCodeManagementButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // gift_code_management_userId
@@ -112,7 +112,7 @@ async function handleGiftCodeManagementButton(interaction) {
         await interaction.update({ components, flags: MessageFlags.IsComponentsV2 });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeManagementButton');
+        await handleError(interaction, lang, error, 'handleGiftCodeManagementButton');
     }
 }
 

@@ -17,9 +17,9 @@ const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { createProcess } = require('../Processes/createProcesses');
 const { queueManager } = require('../Processes/queueManager');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getEmojiMapForAdmin, getComponentEmoji, getGlobalEmojiMap } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji, getGlobalEmojiMap } = require('../utility/emojis');
 
 // Global cache for ID channels
 global.idChannelCache = new Map();
@@ -45,7 +45,7 @@ async function initializeIdChannelCache() {
         });
 
     } catch (error) {
-        await sendError(null, null, error, 'initializeIdChannelCache', false);
+        await handleError(null, null, error, 'initializeIdChannelCache', false);
         throw error;
     }
 }
@@ -86,7 +86,7 @@ function createIdChannelButton(userId, lang = {}) {
         .setCustomId(`id_channel_manage_${userId}`)
         .setLabel(lang.players.mainPage.buttons.idChannel)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1014'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1014'));
 }
 
 /**
@@ -94,7 +94,7 @@ function createIdChannelButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleIdChannelButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // id_channel_manage_userId
@@ -117,13 +117,13 @@ async function handleIdChannelButton(interaction) {
             .setCustomId(`id_channel_add_${interaction.user.id}`)
             .setLabel(lang.players.idChannel.buttons.add)
             .setStyle(ButtonStyle.Success)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1000'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1000'));
 
         const removeButton = new ButtonBuilder()
             .setCustomId(`id_channel_remove_${interaction.user.id}`)
             .setLabel(lang.players.idChannel.buttons.remove)
             .setStyle(ButtonStyle.Danger)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1031'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1031'));
 
         const row = new ActionRowBuilder().addComponents(addButton, removeButton);
 
@@ -152,7 +152,7 @@ async function handleIdChannelButton(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelButton');
+        await handleError(interaction, lang, error, 'handleIdChannelButton');
     }
 }
 
@@ -206,7 +206,7 @@ function createChannelRemovalContainer(interaction, idChannels, lang, page = 0) 
             label: `${channel.alliance_name}`,
             value: channel.id.toString(),
             description: lang.players.idChannel.selectMenu.selectChannel.description.replace('{channelName}', channelName),
-            emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1031')
+            emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1031')
         };
     });
 
@@ -280,7 +280,7 @@ function createAllianceSelectionContainer(interaction, alliances, lang, page = 0
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleIdChannelPagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -307,7 +307,7 @@ async function handleIdChannelPagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelPagination');
+        await handleError(interaction, lang, error, 'handleIdChannelPagination');
     }
 }
 
@@ -316,7 +316,7 @@ async function handleIdChannelPagination(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleIdChannelRemovePagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -343,7 +343,7 @@ async function handleIdChannelRemovePagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelRemovePagination');
+        await handleError(interaction, lang, error, 'handleIdChannelRemovePagination');
     }
 }
 
@@ -352,7 +352,7 @@ async function handleIdChannelRemovePagination(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleIdChannelAdd(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // id_channel_add_userId
@@ -390,7 +390,7 @@ async function handleIdChannelAdd(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelAdd');
+        await handleError(interaction, lang, error, 'handleIdChannelAdd');
     }
 }
 
@@ -399,7 +399,7 @@ async function handleIdChannelAdd(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleIdChannelRemove(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // id_channel_remove_userId
@@ -436,7 +436,7 @@ async function handleIdChannelRemove(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelRemove');
+        await handleError(interaction, lang, error, 'handleIdChannelRemove');
     }
 }
 
@@ -484,7 +484,7 @@ function getIdChannelsForUser(adminData) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleIdChannelRemoveSelect(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID: id_channel_remove_select_userId_page
         const parts = interaction.customId.split('_');
@@ -561,7 +561,7 @@ async function handleIdChannelRemoveSelect(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelRemoveSelect');
+        await handleError(interaction, lang, error, 'handleIdChannelRemoveSelect');
     }
 }
 
@@ -570,7 +570,7 @@ async function handleIdChannelRemoveSelect(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleIdChannelAllianceSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // id_channel_alliance_select_userId_page
@@ -630,7 +630,7 @@ async function handleIdChannelAllianceSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelAllianceSelection');
+        await handleError(interaction, lang, error, 'handleIdChannelAllianceSelection');
     }
 }
 
@@ -639,7 +639,7 @@ async function handleIdChannelAllianceSelection(interaction) {
  * @param {import('discord.js').ChannelSelectMenuInteraction} interaction 
  */
 async function handleIdChannelSelect(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract alliance ID and user ID from custom ID
@@ -728,7 +728,7 @@ async function handleIdChannelSelect(interaction) {
                 id: null // Will be set by DB, but not needed for cache
             });
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleIdChannelSelect_DBSaveError');
+            await handleError(interaction, lang, dbError, 'handleIdChannelSelect_DBSaveError');
         }
 
         const container = [
@@ -754,7 +754,7 @@ async function handleIdChannelSelect(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleIdChannelSelect');
+        await handleError(interaction, lang, error, 'handleIdChannelSelect');
     }
 }
 
@@ -766,8 +766,8 @@ async function handleIdChannelMessage(message) {
     // Ignore bot messages
     if (message.author.bot) return;
 
-    const { lang } = getAdminLang(message.author.id);
-    const emojiMap = getEmojiMapForAdmin(message.author.id);
+    const { lang } = getUserInfo(message.author.id);
+    const emojiMap = getEmojiMapForUser(message.author.id);
 
     try {
         // Check cache first (no DB query for non-ID channels)
@@ -860,13 +860,13 @@ async function handleIdChannelMessage(message) {
         await queueManager.manageQueue(processResult);
 
     } catch (error) {
-        await sendError(null, lang, error, 'handleIdChannelMessage', false);
+        await handleError(null, lang, error, 'handleIdChannelMessage', false);
         // Try to add error reaction
         try {
             await message.reactions.cache.get('⏳')?.users.remove(message.client.user.id);
             await message.react(getComponentEmoji(getGlobalEmojiMap(), '1051'));
         } catch (reactionError) {
-            await sendError(null, lang, reactionError, 'handleIdChannelMessage', false);
+            await handleError(null, lang, reactionError, 'handleIdChannelMessage', false);
         }
     }
 }

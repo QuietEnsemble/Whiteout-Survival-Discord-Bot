@@ -4,9 +4,9 @@ const { createProcess, updateProcessStatus, PROCESS_STATUS } = require('../Proce
 const { queueManager } = require('../Processes/queueManager');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { autoRefreshManager } = require('./refreshAlliance');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 /**
  * Creates a trigger refresh button
@@ -19,7 +19,7 @@ function createTriggerRefreshButton(userId, lang) {
         .setCustomId(`trigger_refresh_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.manualRefresh)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033'));
 }
 
 /**
@@ -27,7 +27,7 @@ function createTriggerRefreshButton(userId, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleTriggerRefreshButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const expectedUserId = interaction.customId.split('_')[2]; // trigger_refresh_userId
 
@@ -70,7 +70,7 @@ async function handleTriggerRefreshButton(interaction) {
         await showTriggerRefreshAllianceSelection(interaction, 0);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTriggerRefreshButton');
+        await handleError(interaction, lang, error, 'handleTriggerRefreshButton');
     }
 }
 
@@ -80,7 +80,7 @@ async function handleTriggerRefreshButton(interaction) {
  * @param {number} page - Current page number
  */
 async function showTriggerRefreshAllianceSelection(interaction, page = 0) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     // Get available alliances based on permissions
     let availableAlliances;
@@ -122,7 +122,7 @@ async function showTriggerRefreshAllianceSelection(interaction, page = 0) {
                 .replace('{priority}', alliance.priority || 'N/A')
                 .replace('{playerCount}', playerCount),
             value: `alliance_${alliance.id}`,
-            emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001')
+            emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001')
         };
     });
 
@@ -183,7 +183,7 @@ async function showTriggerRefreshAllianceSelection(interaction, page = 0) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleTriggerRefreshSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID and verify it matches
         const customIdParts = interaction.customId.split('_');
@@ -231,7 +231,7 @@ async function handleTriggerRefreshSelection(interaction) {
                             await updateProcessStatus(process.id, PROCESS_STATUS.COMPLETED);
                             cancelledAutoRefreshes++;
                         } catch (cancelError) {
-                            await sendError(interaction, lang, cancelError, `cancelAutoRefresh`, false);
+                            await handleError(interaction, lang, cancelError, `cancelAutoRefresh`, false);
                         }
                     }
 
@@ -243,7 +243,7 @@ async function handleTriggerRefreshSelection(interaction) {
                     );
                 }
             } catch (error) {
-                await sendError(interaction, lang, error, `handleTriggerRefreshSelection_stopAutoRefresh`, false);
+                await handleError(interaction, lang, error, `handleTriggerRefreshSelection_stopAutoRefresh`, false);
             }
         }
 
@@ -284,7 +284,7 @@ async function handleTriggerRefreshSelection(interaction) {
                 successCount++;
 
             } catch (error) {
-                await sendError(interaction, lang, error, `handleTriggerRefreshSelection_createProcess`, false);
+                await handleError(interaction, lang, error, `handleTriggerRefreshSelection_createProcess`, false);
                 results.push(lang.alliance.refreshAlliance.errors.allianceError
                     .replace('{allianceId}', allianceId)
                     .replace('{errorMessage}', error.message));
@@ -313,7 +313,7 @@ async function handleTriggerRefreshSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, `handleTriggerRefreshSelection`);
+        await handleError(interaction, lang, error, `handleTriggerRefreshSelection`);
     }
 }
 
@@ -322,7 +322,7 @@ async function handleTriggerRefreshSelection(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleTriggerRefreshPagination(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -334,7 +334,7 @@ async function handleTriggerRefreshPagination(interaction) {
         await showTriggerRefreshAllianceSelection(interaction, newPage);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTriggerRefreshPagination');
+        await handleError(interaction, lang, error, 'handleTriggerRefreshPagination');
     }
 }
 

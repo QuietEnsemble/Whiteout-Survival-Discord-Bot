@@ -2,7 +2,7 @@ const { getProcessById, updateProcessStatus, PROCESS_STATUS } = require('./creat
 const { queueManager } = require('./queueManager');
 const { systemLogQueries } = require('../utility/database');
 const { executeAutoRefresh: executeAutoRefreshFunction } = require('../Alliance/refreshAlliance');
-const { sendError } = require('../utility/commonFunctions');
+const { handleError } = require('../utility/commonFunctions');
 
 /**
  * SQLite-based process execution controller with priority management
@@ -91,7 +91,7 @@ class ProcessExecutor {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'executeProcess function', false);
+            await handleError(null, null, error, 'executeProcess function', false);
 
             // Clean up
             this.activeProcesses.delete(processInfo.process_id);

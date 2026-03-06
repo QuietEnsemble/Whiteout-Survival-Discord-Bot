@@ -23,6 +23,10 @@
 				"settingsField": {
 					"name": "- **Settings**",
 					"value": "  - Access the bot settings"
+				},
+				"calculatorsField": {
+					"name": "- **Calculators**",
+					"value": "  - Access various calculators to help with your gameplay"
 				}
 			},
 			"buttons": {
@@ -32,6 +36,7 @@
 				"notification": "Notifications",
 				"support": "Support",
 				"settings": "Settings",
+				"calculators": "Calculators",
 				"backToPanel": "Back"
 			},
 			"errors": {}
@@ -594,8 +599,8 @@
 					"result": "### {emoji.1041} Move Players Results"
 				},
 				"description": {
-					"base": "Choose the alliance you want to move players FROM:",
-					"selectDestination": "Choose the alliance you want to move players **TO**:\n**Source Alliance:** {sourceName}",
+					"base": "Choose the alliance you want to move players **FROM:**\n**Target Alliance:** {targetName}",
+					"selectDestination": "Choose the alliance you want to move players **TO**:",
 					"selectPlayers": "Select players to move:\n**From:** {sourceName}\n**To:** {destName}",
 					"success": "The **{count}** selected players have been moved successfully to **{destName}**.",
 					"cancel": "The player move operation has been cancelled. No players were moved.",
@@ -603,11 +608,13 @@
 				},
 				"movedField": {
 					"name": "- **Successfully Moved**",
-					"value": "  - {movedCount} players moved successfully from **{sourceName}** to **{destName}**"
+					"value": "  - {movedCount} players moved successfully from **{sourceName}** to **{destName}**",
+					"valueNoSource": "  - {movedCount} players moved successfully to **{destName}**"
 				},
 				"notFoundField": {
 					"name": "- **Players Not Found**",
-					"value": "  - {notFoundCount} players were not found in **{sourceName}**\nIDs: {notFoundIds}"
+					"value": "  - {notFoundCount} players were not found in **{sourceName}**\nIDs: {notFoundIds}",
+					"valueNoSource": "  - {notFoundCount} player IDs not found\nIDs: {notFoundIds}"
 				},
 				"availablePlayersField": {
 					"name": "- **Available Players to Move**",
@@ -616,7 +623,9 @@
 				"wrongAllianceField": {
 					"name": "- **Different Alliances Detected**",
 					"value": "  - Some players are from different alliances. Do you want to move them anyway?"
-				}
+				},
+				"listEntry": "  - {name} (ID: {fid})",
+				"andMore": "  - ... and {n} more"
 			},
 			"buttons": {
 				"inputPlayerId": "Move by ID",
@@ -1240,7 +1249,7 @@
 				"invalidDateFormat": "{emoji.1050} Invalid date format. Use DD/MM/YYYY.",
 				"invalidTimeFormat": "{emoji.1050} Invalid time format. Use HH:MM:SS.",
 				"invalidDateTime": "{emoji.1050} Invalid date or time values.",
-				"timeInPast": "{emoji.1050} The trigger time is in the past. Use the **Info** button to set a future trigger time.",
+				"timeInPast": "{emoji.1050} The trigger time is in the past. The notification name has been updated.",
 				"alreadyDisabled": "{emoji.1050} This notification is already disabled."
 			}
 		},
@@ -1627,7 +1636,7 @@
 					"value": "  - Change the bot's language when interacting with you."
 				},
 				"adminManagementField": {
-					"name": "- **Admin Management**",
+					"name": "- **Admins**",
 					"value": "  - Manage bot admins and their permissions."
 				},
 				"themeField": {
@@ -1635,39 +1644,44 @@
 					"value": "  - Customize the appearance of bot messages with different themes."
 				},
 				"autoDeleteField": {
-					"name": "- **Auto-Delete Non-Existent Players**",
+					"name": "- **Auto remove deleted Players**",
 					"value": "  - Automatically remove players who no longer exist after 3 checks.\n  - Current status: **{autoDelete}**."
 				},
 				"mergeField": {
-					"name": "- **Merge Data**",
+					"name": "- **Merge**",
 					"value": "  - Merge your old python bot data with this new version to keep all your stats and history intact."
 				},
 				"backupField": {
-					"name": "- **Backup Data**",
+					"name": "- **Backup**",
 					"value": "  - Create and configure backups of your bot data using Google Drive."
 				},
 				"autoUpdateField": {
-					"name": "- **Auto Update**",
-					"value": "  - Check for and apply bot updates directly from GitHub."
+					"name": "- **Update**",
+					"value": "  - Check for and apply bot updates directly."
+				},
+				"featureAccessField": {
+					"name": "- **Features Access**",
+					"value": "  - Enable or disable access to specific bot features for regular users."
 				},
 				"disabled": "Disabled",
 				"enabled": "Enabled"
 			},
 			"buttons": {
-				"language": "Change Language",
-				"adminManagement": "Admin Management",
+				"language": "Language",
+				"manageAdmins": "Admins",
 				"autoDelete": "Auto Delete",
 				"theme": "Themes",
-				"merge": "Merge Data",
-				"backup": "Backup Data",
-				"autoUpdate": "Auto Update",
+				"merge": "Merge",
+				"backup": "Backup",
+				"autoUpdate": "Update",
+				"featureAccess": "Features Access",
 				"backToSettings": "Back"
 			},
 			"errors": {}
 		},
 		"autoUpdate": {
 			"content": {
-				"title": "### {emoji.1033} Auto Update",
+				"title": "### {emoji.1033} Update",
 				"description": {
 					"upToDate": "You are running the latest version!",
 					"updateAvailable": "A new version is available! Click the button below to update.",
@@ -1703,154 +1717,155 @@
 			}
 		},
 		"adminManagement": {
-			"content": {
-				"title": "### {emoji.1027} Admin Management",
-				"description": "Manage bot admins and their permissions.",
-				"addAdminField": {
-					"name": "- **Add Admin**",
-					"value": "  - Promote a user to admin"
+			"mainPage": {
+				"content": {
+					"title": "### {emoji.1027} Admin Management",
+					"description": "Manage bot admins and their permissions.",
+					"addAdminField": {
+						"name": "- **Add Admin**",
+						"value": "  - Promote a user to admin"
+					},
+					"removeAdminField": {
+						"name": "- **Remove Admin**",
+						"value": "  - Demote an admin to regular user"
+					},
+					"assignPermissionsField": {
+						"name": "- **Assign Permissions**",
+						"value": "  - Modify admin permissions"
+					},
+					"viewAdminsField": {
+						"name": "- **View Admin**",
+						"value": "  - List all current admins and their permissions"
+					}
 				},
-				"removeAdminField": {
-					"name": "- **Remove Admin**",
-					"value": "  - Demote an admin to regular user"
-				},
-				"assignPermissionsField": {
-					"name": "- **Assign Permissions**",
-					"value": "  - Modify admin permissions"
-				},
-				"viewAdminsField": {
-					"name": "- **View Admin**",
-					"value": "  - List all current admins and their permissions"
+				"buttons": {
+					"addAdmin": "Add Admin",
+					"removeAdmin": "Remove Admin",
+					"assignPermissions": "Assign Permissions",
+					"viewAdmin": "View Admin"
 				}
 			},
-			"buttons": {
-				"manageAdmins": "Manage Admins",
-				"addAdmin": "Add Admin",
-				"removeAdmin": "Remove Admin",
-				"assignPermissions": "Assign Permissions",
-				"viewAdmin": "View Admin"
-			}
-		},
-		"addAdmin": {
-			"content": {
-				"title": {
-					"base": "### {emoji.1027} Select User to Promote",
-					"success": "### {emoji.1004} Admin Added Successfully"
+			"addAdmin": {
+				"content": {
+					"title": {
+						"base": "### {emoji.1027} Select User to Promote",
+						"success": "### {emoji.1004} Admin Added Successfully"
+					},
+					"description": {
+						"base": "Select a user from the dropdown menu below to promote them to admin.",
+						"success": "{admin} has been promoted to admin."
+					}
 				},
-				"description": {
-					"base": "Select a user from the dropdown menu below to promote them to admin.",
-					"success": "{admin} has been promoted to admin."
+				"selectMenu": {
+					"selectUser": {
+						"placeholder": "Select a user to promote to admin"
+					}
+				},
+				"errors": {
+					"userAlreadyAdmin": "{emoji.1050} {selectedUser} is already an admin."
 				}
 			},
-			"selectMenu": {
-				"selectUser": {
-					"placeholder": "Select a user to promote to admin"
+			"assignAdmin": {
+				"content": {
+					"title": {
+						"base": "### {emoji.1008} Select Admin to Edit",
+						"edit": "### {emoji.1008} Edit Permissions",
+						"success": "### {emoji.1004} Admin Permissions Updated"
+					},
+					"description": {
+						"base": "Select an admin from the dropdown menu below to edit their permissions.",
+						"selectPermissions": "Select the permissions for **{admin}** using the dropdown menu below.",
+						"success": "Permissions for **{admin}** have been updated successfully."
+					},
+					"availablePermissionsField": {
+						"name": "**Available Permissions**",
+						"value": "{permissionsList}"
+					},
+					"updatedPermissionsField": {
+						"name": "- **Updated Permissions**",
+						"value": "{permissionsList}"
+					},
+					"noPermissions": "No permissions assigned"
+				},
+				"selectMenu": {
+					"adminSelect": {
+						"placeholder": "Select an admin to edit their permissions"
+					},
+					"permissionSelect": {
+						"placeholder": "Select permissions for this admin"
+					}
+				},
+				"error": {
+					"noAdmins": "{emoji.1050} No admins found.",
+					"userNotAdmin": "{emoji.1050} Selected user is not an admin."
 				}
 			},
-			"errors": {
-				"userAlreadyAdmin": "{emoji.1050} {selectedUser} is already an admin."
-			}
-		},
-		"assignAdmin": {
-			"content": {
-				"title": {
-					"base": "### {emoji.1008} Select Admin to Edit",
-					"edit": "### {emoji.1008} Edit Permissions",
-					"success": "### {emoji.1004} Admin Permissions Updated"
+			"removeAdmin": {
+				"content": {
+					"title": {
+						"base": "### {emoji.1051} Select Admin to Demote",
+						"confirm": "### {emoji.1050} Confirm Demotion",
+						"success": "### {emoji.1004} Admin Removed Successfully",
+						"cancel": "### {emoji.1051} Demotion Canceled"
+					},
+					"description": {
+						"base": "Select an admin from the dropdown menu below to demote them to a regular user.",
+						"confirm": "Are you sure you want to remove **{admin}** admin privileges?",
+						"success": "{admin} has been demoted to a regular user."
+					}
 				},
-				"description": {
-					"base": "Select an admin from the dropdown menu below to edit their permissions.",
-					"selectPermissions": "Select the permissions for **{admin}** using the dropdown menu below.",
-					"success": "Permissions for **{admin}** have been updated successfully."
+				"buttons": {
+					"confirm": "Confirm Demotion",
+					"cancel": "Cancel"
 				},
-				"availablePermissionsField": {
-					"name": "**Available Permissions**",
-					"value": "{permissionsList}"
+				"selectMenu": {
+					"adminSelect": {
+						"placeholder": "Select an admin to remove"
+					}
 				},
-				"updatedPermissionsField": {
-					"name": "- **Updated Permissions**",
-					"value": "{permissionsList}"
-				},
-				"noPermissions": "No permissions assigned"
-			},
-			"selectMenu": {
-				"adminSelect": {
-					"placeholder": "Select an admin to edit their permissions"
-				},
-				"permissionSelect": {
-					"placeholder": "Select permissions for this admin"
+				"error": {
+					"noAdmins": "{emoji.1050} No admins found.",
+					"userNotAdmin": "{emoji.1050} Selected user is not an admin."
 				}
 			},
-			"error": {
-				"noAdmins": "{emoji.1050} No admins found.",
-				"userNotAdmin": "{emoji.1050} Selected user is not an admin."
-			}
-		},
-		"removeAdmin": {
-			"content": {
-				"title": {
-					"base": "### {emoji.1051} Select Admin to Demote",
-					"confirm": "### {emoji.1050} Confirm Demotion",
-					"success": "### {emoji.1004} Admin Removed Successfully",
-					"cancel": "### {emoji.1051} Demotion Canceled"
+			"viewAdmins": {
+				"content": {
+					"title": {
+						"base": "### {emoji.1021} View Admin Details",
+						"selectedAdmin": "### {emoji.1026} Selected Admin",
+						"fullLogs": "{emoji.1021} Full {user} Logs"
+					},
+					"description": "Select an admin from the dropdown menu below to view their details and activity.",
+					"adminInfoField": {
+						"name": "- **Admin Info**",
+						"value": "  - Username: {username}\n  - User ID: {userId}"
+					},
+					"permissionsField": {
+						"name": "- **Permissions**",
+						"value": "{permissionsList}"
+					},
+					"recentActivityField": {
+						"name": "- **Recent Activity**",
+						"value": "{activityList}"
+					},
+					"actionLogsField": {
+						"name": "Action Logs",
+						"value": "{logsList}"
+					},
+					"noPermissions": "No permissions assigned",
+					"noRecentActivity": "No recent activity found.",
+					"noLogsFound": "No logs found."
 				},
-				"description": {
-					"base": "Select an admin from the dropdown menu below to demote them to a regular user.",
-					"confirm": "Are you sure you want to remove **{admin}** admin privileges?",
-					"success": "{admin} has been demoted to a regular user."
+				"buttons": {
+					"viewLogs": "View Full Logs"
+				},
+				"selectMenu": {
+					"placeholder": "Select an admin to view"
+				},
+				"error": {
+					"noAdmins": "{emoji.1050} No admins found.",
+					"userNotAdmin": "{emoji.1050} Selected user is not an admin."
 				}
-			},
-			"buttons": {
-				"confirm": "Confirm Demotion",
-				"cancel": "Cancel"
-			},
-			"selectMenu": {
-				"adminSelect": {
-					"placeholder": "Select an admin to remove"
-				}
-			},
-			"error": {
-				"noAdmins": "{emoji.1050} No admins found.",
-				"userNotAdmin": "{emoji.1050} Selected user is not an admin."
-			}
-		},
-		"viewAdmins": {
-			"content": {
-				"title": {
-					"base": "### {emoji.1021} View Admin Details",
-					"selectedAdmin": "### {emoji.1026} Selected Admin",
-					"fullLogs": "{emoji.1021} Full {user} Logs"
-				},
-				"description": "Select an admin from the dropdown menu below to view their details and activity.",
-				"adminInfoField": {
-					"name": "- **Admin Info**",
-					"value": "  - Username: {username}\n  - User ID: {userId}"
-				},
-				"permissionsField": {
-					"name": "- **Permissions**",
-					"value": "{permissionsList}"
-				},
-				"recentActivityField": {
-					"name": "- **Recent Activity**",
-					"value": "{activityList}"
-				},
-				"actionLogsField": {
-					"name": "Action Logs",
-					"value": "{logsList}"
-				},
-				"noPermissions": "No permissions assigned",
-				"noRecentActivity": "No recent activity found.",
-				"noLogsFound": "No logs found."
-			},
-			"buttons": {
-				"viewLogs": "View Full Logs"
-			},
-			"selectMenu": {
-				"placeholder": "Select an admin to view"
-			},
-			"error": {
-				"noAdmins": "{emoji.1050} No admins found.",
-				"userNotAdmin": "{emoji.1050} Selected user is not an admin."
 			}
 		},
 		"migration": {
@@ -2358,6 +2373,64 @@
 					"reloadFailed": "{emoji.1050} Failed to reload default pack. Please try again."
 				}
 			}
+		},
+		"featureAccess": {
+			"content": {
+				"title": {
+					"base": "### {emoji.1011} Feature Access Control",
+					"selectAccess": "### {emoji.1011} Set Access for {featureName}",
+					"ChannelSelect": "### {emoji.1014} Select channels",
+					"whitelistedChannels": "### {emoji.1014} Whitelisted channels",
+					"confirmation": "### {emoji.1050} Confirm Access Change"
+				},
+				"description": {
+					"base": "Control access to specific bot features by restricting them to admins only, specific channel, or disable them entirely.",
+					"selectAccess": "- Everyone\n  - All users can access the feature\n- Admins Only\n  - Only users with admin permissions can access the feature\n- Specific Channel\n  - Will be restricted to specific channels (can be set via whitelist channels button)\n- Disable\n  - The feature will be disabled and inaccessible to all users except bot owner",
+					"chooseChannelsToAdd": "Select channels to add to the whitelist",
+					"chooseChannelsToRemove": "Select channels to remove from the whitelist",
+					"channelsRemoved": "The following channels have been removed from the whitelist:\n{channelsList}",
+					"channelsAdded": "The following channels have been added to the whitelist:\n{channelsList}",
+					"chooseAction": "- Choose an action for whitelisted channels:\n  - Add: Add more channels to the whitelist\n  - Remove: Remove channels from the whitelist",
+					"everyone": "Changing private notifications access to **Everyone** will allow all users to create private notifications.",
+					"admins": "Changing private notifications access to **Admins Only** will:\n- Disable all existing private notifications created by non-admin users\n- Only the owner and registered admins will be able to create new private notifications",
+					"channel": "Changing private notifications access to **Specific Channel** will:\n- Disable all existing private notifications created by non-owner users\n- Only the owner will be able to create private notifications\n\n**Note:** This setting doesn't apply to private notifications (DMs) as they have no channel context.",
+					"disable": "Changing private notifications access to **Disable** will:\n- Disable all existing private notifications created by non-owner users\n- Only the owner will be able to manage notifications"
+				},
+				"affectedNotifications": "\n**{count} notification(s) will be deactivated.**",
+				"noAffectedNotifications": "\nNo notifications will be affected.",
+				"changeApplied": "Access changed successfully.\n{affectedInfo}",
+				"notificationsDeactivated": "{count} private notification(s) have been deactivated.",
+				"noNotificationsDeactivated": "No notifications were deactivated.",
+				"updated": "Feature access updated!",
+				"privateNotifications": "private notifications",
+				"calculators": "calculators"
+			},
+			"buttons": {
+				"privateNotifications": "Private Notifications",
+				"calculators": "Calculators",
+				"whitelistChannels": "Whitelist Channels",
+				"everyone": "everyone",
+				"admins": "Admins Only",
+				"channel": "Specific Channel",
+				"disable": "Disable Feature",
+				"add": "Add",
+				"remove": "Remove",
+				"confirm": "Confirm & Deactivate",
+				"cancel": "Cancel"
+			},
+			"selectmenu": {
+				"channelAdd": {
+					"placeholder": "Select a channel to whitelist"
+				},
+				"channelRemove": {
+					"placeholder": "Select a channel to remove from whitelist"
+				}
+			},
+			"errors": {
+				"noWhitelistedChannels": "No whitelisted channels found for this server. Please add channels to the whitelist.",
+				"notServer": "{emoji.1050} This feature is only available when running on a server.",
+				"alreadyExisits": "{emoji.1050} The selected channels is already whitelisted."
+			}
 		}
 	},
 	"support": {
@@ -2365,6 +2438,129 @@
 			"content": {
 				"title": "### {emoji.1039} Support",
 				"description": "If you need help with the bot or are experiencing any issues, feel free to ask on our [Discord](https://discord.gg/A7ZVTFd4p9).\nFor emotional and financial support, you can buy me a coffee here: [Buy Me A Coffee](https://buymeacoffee.com/wosland) {emoji.1039}"
+			}
+		}
+	},
+	"calculators": {
+		"mainPage": {
+			"content": {
+				"title": "### {emoji.1041} Calculators",
+				"BuildingsField": {
+					"name": "- **Buildings Calculator**",
+					"value": "  - Calculate the cost and time required to upgrade your buildings."
+				}
+			},
+			"buttons": {
+				"buildings": "Buildings"
+			},
+			"errors": {}
+		},
+		"buildings": {
+			"content": {
+				"title": "### {emoji.1041} Buildings Calculator",
+				"buildings": {
+					"barricade": "Barricade",
+					"marksmanCamp": "Marksman Camp",
+					"lancerCamp": "Lancer Camp",
+					"infantryCamp": "Infantry Camp",
+					"researchCenter": "Research Center",
+					"infirmary": "Infirmary",
+					"commandCenter": "Command Center",
+					"embassy": "Embassy",
+					"storehouse": "Storehouse",
+					"furnace": "Furnace",
+					"warAcademy": "War Academy"
+				},
+				"resources": {
+					"meat": "Meat",
+					"wood": "Wood",
+					"iron": "Iron",
+					"coal": "Coal",
+					"fireCrystal": "Fire Crystal",
+					"refinedFireCrystal": "Refined Fire Crystal"
+				}
+			},
+			"types": {
+				"basic": "Basic",
+				"fireCrystal": "Fire Crystal"
+			},
+			"levelDisplay": "Level {key}",
+			"header": {
+				"typeSelection": "### Building Upgrade Calculator\nSelect the building category:",
+				"controls": "### {type} Buildings",
+				"from": "**From:** {level}",
+				"selected": "**Building:** {name}"
+			},
+			"buttons": {
+				"basic": "Basic Buildings",
+				"fireCrystal": "Fire Crystal Buildings",
+				"buffs": "Buffs",
+				"back": "Back",
+				"prev": "Prev",
+				"next": "Next",
+				"copy": "Copy"
+			},
+			"placeholders": {
+				"selectBuilding": "Select a building",
+				"selectStartingLevel": "Select starting level",
+				"selectTargetLevel": "Select target level"
+			},
+			"modal": {
+				"title": "Calculator Buffs",
+				"vpDoubleTime": {
+					"label": "VP / Double Time Bonus",
+					"placeholder": "Select VP / Double Time",
+					"off": "Off",
+					"vp10": "VP 10%",
+					"vp15": "VP 15%",
+					"doubleTime": "Double Time (+20%)",
+					"vp10dt": "VP 10% + Double Time (+30%)",
+					"vp15dt": "VP 15% + Double Time (+35%)"
+				},
+				"pet": {
+					"label": "Cave Hyena Pet (Build Speed)",
+					"placeholder": "Select pet level",
+					"off": "Off",
+					"level": "Level {n} (+{pct}% speed)"
+				},
+				"zinman": {
+					"label": "Zinman (Resource Reduction)",
+					"placeholder": "Select Zinman level",
+					"off": "Off",
+					"level": "Level {n} ({pct}% resource reduction)"
+				},
+				"expert": {
+					"label": "Expert (Fixed Time Reduction)",
+					"placeholder": "Select Expert level",
+					"off": "Off",
+					"level": "Level {n} (-{time} per upgrade)"
+				},
+				"speed": {
+					"label": "Construction Speed %",
+					"description": "Manual construction speed buff (e.g. 150 for 150%)",
+					"placeholder": "e.g. 150"
+				}
+			},
+			"results": {
+				"upgradePlan": "### Upgrade Plan",
+				"resourcesRequired": "- **Resources Required:**",
+				"buildTime": "- **Build Time:**",
+				"original": "  - Original: **{time}**",
+				"withBuffs": "  - With buffs: **{time}**",
+				"requirements": "- **Requirements:**",
+				"requirementLevel": "{level}",
+				"buffsLine": "- **Buffs Applied**\n  - {parts}",
+				"buffs": {
+					"constructionSpeed": "Construction Speed: {pct}%",
+					"pet": "Pet Lv.{n} (+{pct}% speed)",
+					"zinman": "Zinman Lv.{n} ({pct}% res. reduction)",
+					"expert": "Expert Lv.{n} (-{time}/upgrade x {levels})"
+				}
+			},
+			"errors": {
+				"calcFailed": "Unable to calculate upgrade cost. Please check your level selections.",
+				"noSummary": "Unable to generate summary.",
+				"dmSent": "Summary sent to your DMs!"
 			}
 		}
 	},
@@ -2434,7 +2630,7 @@
 		}
 	},
 	"common": {
-		"notForYou": "{emoji.1050} This interaction is not for you.",
+		"notForYou": "{emoji.1050} This is not for you.",
 		"noPermission": "{emoji.1050} You do not have permission to perform this action.",
 		"error": "{emoji.1050} An error occurred. Please try again later.",
 		"furnaceCrystal": "FC"

@@ -8,8 +8,8 @@ const {
     SeparatorSpacingSize,
     ActionRowBuilder
 } = require('discord.js');
-const { getAdminLang, sendError, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { getUserInfo, handleError, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 
 /**
  * Creates an auto-update button for the settings panel
@@ -22,7 +22,7 @@ function createAutoUpdateButton(userId, lang) {
         .setCustomId(`auto_update_check_${userId}`)
         .setLabel(lang.settings.mainPage.buttons.autoUpdate)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033'));
 }
 
 /**
@@ -31,7 +31,7 @@ function createAutoUpdateButton(userId, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleAutoUpdateCheck(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID: auto_update_check_userId
         const expectedUserId = interaction.customId.split('_')[3];
@@ -88,7 +88,7 @@ async function handleAutoUpdateCheck(interaction) {
                 .setCustomId(`auto_update_apply_${interaction.user.id}`)
                 .setLabel(settingsLang.buttons.applyUpdate)
                 .setStyle(ButtonStyle.Success)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004'));
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004'));
 
             components.push(new ActionRowBuilder().addComponents(applyButton));
         }
@@ -116,7 +116,7 @@ async function handleAutoUpdateCheck(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAutoUpdateCheck');
+        await handleError(interaction, lang, error, 'handleAutoUpdateCheck');
     }
 }
 
@@ -126,7 +126,7 @@ async function handleAutoUpdateCheck(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleAutoUpdateApply(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID: auto_update_apply_userId
         const expectedUserId = interaction.customId.split('_')[3];
@@ -221,7 +221,7 @@ async function handleAutoUpdateApply(interaction) {
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAutoUpdateApply');
+        await handleError(interaction, lang, error, 'handleAutoUpdateApply');
     }
 }
 

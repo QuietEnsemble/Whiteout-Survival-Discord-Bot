@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { sendError } = require('../functions/utility/commonFunctions');
+const { handleError } = require('../functions/utility/commonFunctions');
 
 module.exports = {
     name: Events.InteractionCreate,
@@ -20,7 +20,7 @@ module.exports = {
 
         } catch (error) {
             console.error(`Error executing ${interaction.commandName}:`, error);
-            await sendError(interaction, null, error, `${interaction.commandName} command`);
+            await handleError(interaction, null, error, `${interaction.commandName} command`);
         }
     }
 };

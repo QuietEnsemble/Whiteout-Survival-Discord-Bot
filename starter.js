@@ -34,7 +34,7 @@ const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/lat
  * Automatically runs npm install if any are missing
  * @returns {boolean} True if all dependencies are present
  */
-function checkDependencies() {
+async function checkDependencies() {
     const packageJsonPath = path.join(__dirname, 'package.json');
     if (!fs.existsSync(packageJsonPath)) {
         console.error('[PREFLIGHT] package.json not found!');
@@ -55,13 +55,10 @@ function checkDependencies() {
 
     if (missing.length > 0) {
         console.log(`[PREFLIGHT] Missing dependencies: ${missing.join(', ')}`);
-        console.log('[PREFLIGHT] Running npm install...');
-        try {
-            execSync('npm install --no-optional', { stdio: 'inherit', cwd: __dirname });
-            console.log('[PREFLIGHT] Dependencies installed successfully.\n');
-        } catch (error) {
-            console.error('[PREFLIGHT] Failed to install dependencies:', error.message);
-            console.error('[PREFLIGHT] Please run "npm install --no-optional" manually.');
+        const ok = await robustNpmInstall(__dirname, '[PREFLIGHT]');
+        if (!ok) {
+            console.error('[PREFLIGHT] Failed to install dependencies.');
+            console.error('[PREFLIGHT] Please run "npm install --omit=optional" manually.');
             return false;
         }
     }
@@ -386,8 +383,10 @@ async function applyUpdate() {
         const pkgAfter = fs.existsSync(pkgPath) ? fs.readFileSync(pkgPath, 'utf8') : '';
         if (pkgBefore !== pkgAfter) {
             console.log('\n[UPDATE] Dependencies changed - installing new packages...');
-            execSync('npm install --no-optional', { stdio: 'inherit', cwd: __dirname });
-            console.log('[UPDATE] Dependencies installed successfully.');
+            const ok = await robustNpmInstall(__dirname, '[UPDATE]');
+            if (!ok) {
+                console.warn('[UPDATE] Some packages may not have installed correctly. Run "npm install --omit=optional" if issues persist.');
+            }
         } else {
             console.log('\n[UPDATE] No dependency changes detected - skipping npm install.');
         }
@@ -451,6 +450,172 @@ async function applyUpdate() {
         return { success: false, message: `Update failed: ${error.message}` };
     }
 }
+
+// ============================================================
+// NODE VERSION CHECK
+// ============================================================
+
+/**
+ * Warns if the running Node.js version is known to break native modules.
+ * better-sqlite3 fails to compile on Node 25+ due to V8 API changes.
+ * Recommended: Node 18, 20, or 22 LTS.
+ */
+function checkNodeVersion() {
+    const [major] = process.versions.node.split('.').map(Number);
+    if (major >= 23) {
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.warn(`[WARNING] Node.js v${process.versions.node} detected.`);
+        console.warn('[WARNING] Node 23+ breaks better-sqlite3 native compilation.');
+        console.warn('[WARNING] Recommended: Node 18, 20, or 22 LTS.');
+        console.warn('[WARNING] Install via: https://nodejs.org or nvm');
+        console.warn('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        return false;
+    }
+    return true;
+}
+
+// ============================================================
+// ROBUST NPM INSTALL: Retry + per-package fallback for low-RSS environments
+// ============================================================
+
+/** Promisified spawn — child memory is independent of our V8 heap. */
+function spawnAsync(cmd, args, opts) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, { ...opts, shell: process.platform === 'win32' });
+        child.on('exit', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`"${cmd} ${args.join(' ')}" exited with code ${code}`));
+        });
+        child.on('error', reject);
+    });
+}
+
+/** Simple sleep helper */
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Calculates a safe --max-old-space-size for the npm subprocess.
+ * npm 11 needs ~300-400 MB just for packument caching on large trees.
+ * We give it as much of the free RAM as we can, capped at 1 GB.
+ */
+function npmHeapMb() {
+    const freeMb = Math.floor(os.freemem() / 1024 / 1024);
+    return Math.min(Math.max(freeMb - 64, 256), 1024); // leave 64 MB headroom
+}
+
+const HEAVY_OPTIONAL_PACKAGES = new Set([
+    'onnxruntime-node', 
+]);
+
+/**
+ * Runs npm install with automatic retry and per-package fallback.
+ *
+ * @param {string} cwd     - Working directory (where package.json lives)
+ * @param {string} context - Log prefix, e.g. '[PREFLIGHT]'
+ * @returns {Promise<boolean>}
+ */
+async function robustNpmInstall(cwd, context) {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 5000;
+    const heapMb = npmHeapMb();
+    const npmEnv = { ...process.env, NODE_OPTIONS: `--max-old-space-size=${heapMb}` };
+    const BASE_FLAGS = ['install', '--omit=optional', '--prefer-offline'];
+
+    // ── Step 1: bulk install with retries ─────────────────────────────────
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            console.log(`${context} Running npm install (attempt ${attempt}/${MAX_RETRIES}, npm heap: ${heapMb} MB)...`);
+            await spawnAsync('npm', BASE_FLAGS, { cwd, stdio: 'inherit', env: npmEnv });
+            console.log(`${context} Dependencies installed successfully.\n`);
+            return true;
+        } catch (err) {
+            console.warn(`${context} npm install attempt ${attempt} failed: ${err.message}`);
+            if (attempt < MAX_RETRIES) {
+                console.log(`${context} Retrying in ${RETRY_DELAY_MS / 1000}s...`);
+                await sleep(RETRY_DELAY_MS);
+                if (global.gc) global.gc();
+            }
+        }
+    }
+
+    // ── Step 2: per-package fallback ──────────────────────────────────────
+    console.log(`\n${context} Bulk install failed. Switching to per-package mode to reduce peak memory...`);
+
+    const pkgPath = path.join(cwd, 'package.json');
+    if (!fs.existsSync(pkgPath)) {
+        console.error(`${context} package.json not found`);
+        return false;
+    }
+
+    let pkg;
+    try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')); }
+    catch (e) { console.error(`${context} Failed to parse package.json: ${e.message}`); return false; }
+
+    const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+    // Resume a previous crashed run
+    const progressFile = path.join(cwd, '.install-progress.json');
+    let installed = {};
+    if (fs.existsSync(progressFile)) {
+        try {
+            installed = JSON.parse(fs.readFileSync(progressFile, 'utf8'));
+            console.log(`${context} Resuming — ${Object.keys(installed).length} package(s) already done.`);
+        } catch { installed = {}; }
+    }
+
+    const failed = [];
+
+    for (const [depName, depVersion] of Object.entries(allDeps)) {
+        if (installed[depName]) continue;
+
+        const pkg_spec = `${depName}@${depVersion}`;
+
+        // Heavy packages: always skip their optional blobs
+        const extraFlags = HEAVY_OPTIONAL_PACKAGES.has(depName)
+            ? ['--omit=optional', '--ignore-scripts']
+            : ['--omit=optional'];
+
+        let success = false;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                process.stdout.write(`${context} Installing ${pkg_spec}... `);
+                await spawnAsync('npm', ['install', '--no-save', ...extraFlags, pkg_spec], {
+                    cwd, stdio: 'pipe', env: npmEnv
+                });
+                console.log('✓');
+                installed[depName] = true;
+                fs.writeFileSync(progressFile, JSON.stringify(installed, null, 2), 'utf8');
+                success = true;
+                break;
+            } catch {
+                if (attempt < MAX_RETRIES) {
+                    console.log(`(retry ${attempt})`);
+                    await sleep(2000 * attempt);
+                } else {
+                    console.log('✗');
+                }
+            }
+        }
+
+        if (!success) failed.push(depName);
+        if (global.gc) global.gc();
+        await sleep(0);
+    }
+
+    try { fs.unlinkSync(progressFile); } catch { /* ignore */ }
+
+    if (failed.length > 0) {
+        console.warn(`\n${context} Could not install: ${failed.join(', ')}`);
+        console.warn(`${context} Run "npm install --omit=optional" manually to retry.\n`);
+        return false;
+    }
+
+    console.log(`${context} All packages installed via per-package fallback.\n`);
+    return true;
+}
+
 
 // ============================================================
 // INSTALLER MODE: Auto-install from GitHub if only starter.js exists
@@ -598,15 +763,11 @@ async function installRepo() {
         await downloadAndExtractZip();
 
         console.log('\n[INSTALLER] Repository installed successfully!');
-        console.log('[INSTALLER] Installing dependencies...\n');
-
-        // Install npm dependencies
-        try {
-            execSync('npm install --no-optional', { stdio: 'inherit', cwd: __dirname });
-            console.log('\n[INSTALLER] Dependencies installed successfully!');
-        } catch (error) {
-            console.error('[INSTALLER] Failed to install dependencies:', error.message);
-            console.error('[INSTALLER] Please run "npm install --no-optional" manually.');
+        console.log('\n[INSTALLER] Installing dependencies...\n');
+        const ok = await robustNpmInstall(__dirname, '[INSTALLER]');
+        if (!ok) {
+            console.error('[INSTALLER] Failed to install dependencies.');
+            console.error('[INSTALLER] Please run "npm install --omit=optional" manually.');
             process.exit(1);
         }
 
@@ -650,10 +811,14 @@ if (isInstallerMode()) {
     return; // Exit current execution
 }
 
+// Run pre-flight checks and start bot inside an async context
+(async () => {
+
 // Run pre-flight checks
 console.log('[PREFLIGHT] Running startup checks...');
+checkNodeVersion();
 
-if (!checkDependencies()) {
+if (!await checkDependencies()) {
     console.error('[PREFLIGHT] Dependency check failed. Exiting.');
     process.exit(1);
 }
@@ -1357,3 +1522,5 @@ setupCommandInterface();
 
 // Start the bot after the command UI is ready
 startBot();
+
+})(); // end async startup IIFE

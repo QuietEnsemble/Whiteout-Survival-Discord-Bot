@@ -8,8 +8,8 @@ const { createEditPriorityButton } = require('./editPriority');
 const { createTriggerRefreshButton } = require('./triggerRefresh');
 const { createAssignAllianceButton } = require('./assignAlliance');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 /**
  * Creates an alliance management button
@@ -22,7 +22,7 @@ function createAllianceManagementButton(userId, lang = {}) {
         .setCustomId(`alliance_management_${userId}`)
         .setLabel(lang.panel.mainPage.buttons.alliance)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1001'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1001'));
 }
 
 /**
@@ -31,7 +31,7 @@ function createAllianceManagementButton(userId, lang = {}) {
  */
 async function handleAllianceManagementButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // alliance_management_userId
@@ -118,7 +118,7 @@ async function handleAllianceManagementButton(interaction) {
         await interaction.update({ components, flags: MessageFlags.IsComponentsV2 });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceManagementButton');
+        await handleError(interaction, lang, error, 'handleAllianceManagementButton');
     }
 }
 

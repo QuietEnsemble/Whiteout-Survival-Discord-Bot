@@ -18,8 +18,8 @@ const path = require('path');
 const https = require('https');
 const { customEmojiQueries } = require('../../utility/database');
 const { uploadEmojiPackFromJson, getAvailableEmojiSlots } = require('./emojisUploader');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { PERMISSIONS } = require('../admin/permissions');
 
 /**
@@ -33,11 +33,11 @@ function createEmojiUploadButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_upload_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.uploadPack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 async function handleEmojiUploadButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -68,12 +68,12 @@ async function handleEmojiUploadButton(interaction) {
 		modal.addLabelComponents(fileLabel);
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiUploadButton');
+		await handleError(interaction, lang, error, 'handleEmojiUploadButton');
 	}
 }
 
 async function handleEmojiUploadModal(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -138,7 +138,7 @@ async function handleEmojiUploadModal(interaction) {
 				.setCustomId(`emoji_upload_rename_${tempId}_${interaction.user.id}`)
 				.setLabel(lang.settings.theme.importPack.buttons.rename)
 				.setStyle(ButtonStyle.Primary)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1008'));
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1008'));
 
 			const container = [
 				new ContainerBuilder()
@@ -178,7 +178,7 @@ async function handleEmojiUploadModal(interaction) {
 
 		await finalizeEmojiUpload(interaction, tempPath, lang, true);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiUploadModal');
+		await handleError(interaction, lang, error, 'handleEmojiUploadModal');
 	}
 }
 
@@ -205,7 +205,7 @@ function downloadFileBuffer(url) {
 }
 
 async function handleEmojiUploadRenameButton(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const tempId = parts[3];
@@ -230,12 +230,12 @@ async function handleEmojiUploadRenameButton(interaction) {
 		modal.addLabelComponents(nameLabel);
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiUploadRenameButton');
+		await handleError(interaction, lang, error, 'handleEmojiUploadRenameButton');
 	}
 }
 
 async function handleEmojiUploadRenameModal(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const tempId = parts[4];
@@ -301,7 +301,7 @@ async function handleEmojiUploadRenameModal(interaction) {
 
 		await finalizeEmojiUpload(interaction, pending.path, lang, true);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiUploadRenameModal');
+		await handleError(interaction, lang, error, 'handleEmojiUploadRenameModal');
 	}
 }
 

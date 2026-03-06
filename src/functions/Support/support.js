@@ -1,7 +1,7 @@
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
-const { getAdminLang, sendError, assertUserMatches } = require('../utility/commonFunctions');
+const { getUserInfo, handleError, assertUserMatches } = require('../utility/commonFunctions');
 const { createBackToPanelButton } = require('../Panel/backToPanel');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 
 /**
  * Creates a support button
@@ -14,7 +14,7 @@ function createSupportButton(userId, lang = {}) {
         .setCustomId(`support_${userId}`)
         .setLabel(lang.panel.mainPage.buttons.support)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1039'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1039'));
 }
 
 
@@ -24,7 +24,7 @@ function createSupportButton(userId, lang = {}) {
  */
 async function handleSupportButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[1];
@@ -63,7 +63,7 @@ async function handleSupportButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleSupportButton');
+        await handleError(interaction, lang, error, 'handleSupportButton');
     }
 }
 

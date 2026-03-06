@@ -15,8 +15,8 @@ const { allianceQueries, giftCodeQueries, playerQueries, systemLogQueries } = re
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { createRedeemProcess } = require('./redeemFunction');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 /**
  * Creates a manual redeem gift code button
@@ -29,7 +29,7 @@ function createManualRedeemButton(userId, lang = {}) {
         .setCustomId(`manual_redeem_gift_${userId}`)
         .setLabel(lang.giftCode.mainPage.buttons.useGiftCode)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1043'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1043'));
 }
 
 /**
@@ -37,7 +37,7 @@ function createManualRedeemButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleManualRedeemButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract and verify user ID
@@ -119,7 +119,7 @@ async function handleManualRedeemButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleManualRedeemButton');
+        await handleError(interaction, lang, error, 'handleManualRedeemButton');
     }
 }
 
@@ -162,7 +162,7 @@ function createAllianceSelectionContainer(alliances, userId, lang, page = 0, isO
                 .setLabel(lang.giftCode.redeemGiftCode.selectMenu.selectAlliance.allAlliances)
                 .setValue('ALL_ALLIANCES')
                 .setDescription(`Select all ${alliances.length} alliances (${totalPlayers} total players)`)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1039'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1039'))
         );
     }
 
@@ -175,7 +175,7 @@ function createAllianceSelectionContainer(alliances, userId, lang, page = 0, isO
             .setDescription(lang.giftCode.redeemGiftCode.selectMenu.selectAlliance.description
                 .replace('{priority}', alliance.priority)
                 .replace('{playerCount}', playerCount))
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001'));
     });
 
     options.push(...allianceOptions);
@@ -235,7 +235,7 @@ function createAllianceSelectionContainer(alliances, userId, lang, page = 0, isO
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleAllianceSelectionPagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -289,7 +289,7 @@ async function handleAllianceSelectionPagination(interaction) {
         await interaction.update({ components, flags: MessageFlags.IsComponentsV2 });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceSelectionPagination');
+        await handleError(interaction, lang, error, 'handleAllianceSelectionPagination');
     }
 }
 
@@ -298,7 +298,7 @@ async function handleAllianceSelectionPagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleAllianceSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract user ID from custom ID
@@ -364,7 +364,7 @@ async function handleAllianceSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceSelection');
+        await handleError(interaction, lang, error, 'handleAllianceSelection');
     }
 }
 
@@ -397,7 +397,7 @@ function createGiftCodeSelectionContainer(giftCodes, allianceIds, userId, lang, 
 
     // Create dropdown options
     const options = [];
-    const emojiMap = getEmojiMapForAdmin(userId);
+    const emojiMap = getEmojiMapForUser(userId);
 
     // Add "All Gift Codes" option on first page
     if (page === 0) {
@@ -478,7 +478,7 @@ function createGiftCodeSelectionContainer(giftCodes, allianceIds, userId, lang, 
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleGiftCodeSelectionPagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Parse pagination with alliance IDs as context
@@ -517,7 +517,7 @@ async function handleGiftCodeSelectionPagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeSelectionPagination');
+        await handleError(interaction, lang, error, 'handleGiftCodeSelectionPagination');
     }
 }
 
@@ -526,7 +526,7 @@ async function handleGiftCodeSelectionPagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleGiftCodeSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract data from custom ID
@@ -666,7 +666,7 @@ async function handleGiftCodeSelection(interaction) {
         );
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeSelection');
+        await handleError(interaction, lang, error, 'handleGiftCodeSelection');
     }
 }
 

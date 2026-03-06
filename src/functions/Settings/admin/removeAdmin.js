@@ -15,8 +15,8 @@ const {
 const { adminQueries, adminLogQueries } = require('../../utility/database');
 const { LOG_CODES } = require('../../utility/AdminLogs');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 
 /**
@@ -28,9 +28,9 @@ const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 function createRemoveAdminButton(userId, lang = {}) {
     return new ButtonBuilder()
         .setCustomId(`remove_admin_${userId}`)
-        .setLabel(lang.settings.adminManagement.buttons.removeAdmin)
+        .setLabel(lang.settings.adminManagement.mainPage.buttons.removeAdmin)
         .setStyle(ButtonStyle.Danger)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1031'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1031'));
 }
 
 /**
@@ -39,7 +39,7 @@ function createRemoveAdminButton(userId, lang = {}) {
  */
 async function handleRemoveAdminButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // remove_admin_userId
@@ -61,7 +61,7 @@ async function handleRemoveAdminButton(interaction) {
 
         if (allAdmins.length === 0) {
             return await interaction.reply({
-                content: lang.settings.removeAdmin.error.noAdmins,
+                content: lang.settings.adminManagement.removeAdmin.error.noAdmins,
                 ephemeral: true
             });
         }
@@ -70,7 +70,7 @@ async function handleRemoveAdminButton(interaction) {
         await showRemoveAdminPage(interaction, allAdmins, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveAdminButton');
+        await handleError(interaction, lang, error, 'handleRemoveAdminButton');
     }
 }
 
@@ -91,7 +91,7 @@ async function showRemoveAdminPage(interaction, allAdmins, page = 0, lang) {
     // Create admin select menu
     const adminSelect = new StringSelectMenuBuilder()
         .setCustomId(`select_admin_remove_${interaction.user.id}_${page}`)
-        .setPlaceholder(lang.settings.removeAdmin.selectMenu.adminSelect.placeholder)
+        .setPlaceholder(lang.settings.adminManagement.removeAdmin.selectMenu.adminSelect.placeholder)
         .setMinValues(1)
         .setMaxValues(1);
 
@@ -104,7 +104,7 @@ async function showRemoveAdminPage(interaction, allAdmins, page = 0, lang) {
             new StringSelectMenuOptionBuilder()
                 .setLabel(userTag)
                 .setValue(admin.user_id)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(admin.user_id), '1026'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(admin.user_id), '1026'))
         );
     }
 
@@ -127,8 +127,8 @@ async function showRemoveAdminPage(interaction, allAdmins, page = 0, lang) {
             .setAccentColor(0xe74c3c) // Red accent
             .addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
-                    `${lang.settings.removeAdmin.content.title.base}\n` +
-                    `${lang.settings.removeAdmin.content.description.base}\n` +
+                    `${lang.settings.adminManagement.removeAdmin.content.title.base}\n` +
+                    `${lang.settings.adminManagement.removeAdmin.content.description.base}\n` +
                     `${lang.pagination.text.pageInfo
                         .replace('{current}', (page + 1).toString())
                         .replace('{total}', totalPages.toString())}`
@@ -157,7 +157,7 @@ async function showRemoveAdminPage(interaction, allAdmins, page = 0, lang) {
  */
 async function handleRemoveAdminSelection(interaction) {
     // Get admin language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -178,7 +178,7 @@ async function handleRemoveAdminSelection(interaction) {
         const selectedAdminData = adminQueries.getAdmin(selectedAdminId);
         if (!selectedAdminData) {
             return await interaction.update({
-                content: lang.settings.removeAdmin.error.userNotAdmin,
+                content: lang.settings.adminManagement.removeAdmin.error.userNotAdmin,
                 embeds: [],
                 components: []
             });
@@ -197,15 +197,15 @@ async function handleRemoveAdminSelection(interaction) {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(`confirm_remove_admin_${interaction.user.id}_${selectedAdminId}`)
-                    .setLabel(lang.settings.removeAdmin.buttons.confirm)
+                    .setLabel(lang.settings.adminManagement.removeAdmin.buttons.confirm)
                     .setStyle(ButtonStyle.Danger)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(selectedAdminId), '1004')),
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(selectedAdminId), '1004')),
 
                 new ButtonBuilder()
                     .setCustomId(`cancel_remove_admin_${interaction.user.id}`)
-                    .setLabel(lang.settings.removeAdmin.buttons.cancel)
+                    .setLabel(lang.settings.adminManagement.removeAdmin.buttons.cancel)
                     .setStyle(ButtonStyle.Secondary)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(selectedAdminId), '1051'))
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(selectedAdminId), '1051'))
             );
 
         const components = [
@@ -219,8 +219,8 @@ async function handleRemoveAdminSelection(interaction) {
                         )
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(
-                                `${lang.settings.removeAdmin.content.title.confirm}\n` +
-                                `${lang.settings.removeAdmin.content.description.confirm.replace('{admin}', selectedUser.tag)}`
+                                `${lang.settings.adminManagement.removeAdmin.content.title.confirm}\n` +
+                                `${lang.settings.adminManagement.removeAdmin.content.description.confirm.replace('{admin}', selectedUser.tag)}`
                             )
                         )
                 ).addSeparatorComponents(
@@ -240,7 +240,7 @@ async function handleRemoveAdminSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveAdminSelection');
+        await handleError(interaction, lang, error, 'handleRemoveAdminSelection');
     }
 }
 
@@ -250,7 +250,7 @@ async function handleRemoveAdminSelection(interaction) {
  */
 async function handleConfirmRemoveAdmin(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and admin ID from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -304,8 +304,8 @@ async function handleConfirmRemoveAdmin(interaction) {
                             )
                             .addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent(
-                                    `${lang.settings.removeAdmin.content.title.success}\n` +
-                                    `${lang.settings.removeAdmin.content.description.success.replace('{admin}', adminToRemove.tag)}`
+                                    `${lang.settings.adminManagement.removeAdmin.content.title.success}\n` +
+                                    `${lang.settings.adminManagement.removeAdmin.content.description.success.replace('{admin}', adminToRemove.tag)}`
                                 )
                             )
                     )
@@ -320,11 +320,11 @@ async function handleConfirmRemoveAdmin(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleConfirmRemoveAdmin');
+            await handleError(interaction, lang, dbError, 'handleConfirmRemoveAdmin');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleConfirmRemoveAdmin');
+        await handleError(interaction, lang, error, 'handleConfirmRemoveAdmin');
     }
 }
 
@@ -334,7 +334,7 @@ async function handleConfirmRemoveAdmin(interaction) {
  */
 async function handleCancelRemoveAdmin(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // cancel_remove_admin_userId
@@ -355,7 +355,7 @@ async function handleCancelRemoveAdmin(interaction) {
                 .setAccentColor(0xf39c12) // Orange accent
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `${lang.settings.removeAdmin.content.title.cancel}\n`
+                        `${lang.settings.adminManagement.removeAdmin.content.title.cancel}\n`
                     )
                 )
         ];
@@ -369,7 +369,7 @@ async function handleCancelRemoveAdmin(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleCancelRemoveAdmin');
+        await handleError(interaction, lang, error, 'handleCancelRemoveAdmin');
     }
 }
 
@@ -379,7 +379,7 @@ async function handleCancelRemoveAdmin(interaction) {
  */
 async function handleRemoveAdminPagination(interaction) {
     // Get admin language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Parse pagination data
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -396,7 +396,7 @@ async function handleRemoveAdminPagination(interaction) {
         await showRemoveAdminPage(interaction, allAdmins, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveAdminPagination');
+        await handleError(interaction, lang, error, 'handleRemoveAdminPagination');
     }
 }
 

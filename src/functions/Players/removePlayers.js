@@ -18,8 +18,8 @@ const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { getFurnaceReadable } = require('./furnaceReadable');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 /**
  * Creates the remove players button for the player management panel
@@ -32,7 +32,7 @@ function createRemovePlayersButton(userId, lang = {}) {
         .setCustomId(`remove_players_${userId}`)
         .setLabel(lang.players.mainPage.buttons.removePlayers)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1046'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
 
 /**
@@ -41,7 +41,7 @@ function createRemovePlayersButton(userId, lang = {}) {
  */
 async function handleRemovePlayersButton(interaction) {
     // Get user's language preference
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // remove_players_userId
@@ -100,7 +100,7 @@ async function handleRemovePlayersButton(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersButton');
+        await handleError(interaction, lang, error, 'handleRemovePlayersButton');
     }
 }
 
@@ -170,7 +170,7 @@ function createAllianceSelectionContainer(interaction, alliances, lang, page = 0
                 description: lang.players.removePlayer.selectMenu.allianceSelect.description
                     .replace('{alliancePriority}', alliance.priority)
                     .replace('{playerCount}', playerCount),
-                emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001')
+                emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001')
             };
         }
     });
@@ -201,7 +201,7 @@ function createPlayerSelectionEmbed(interaction, players, lang, alliance, page =
         .setCustomId(`remove_players_add_ids_${interaction.user.id}_${alliance.id}`)
         .setLabel(lang.players.removePlayer.buttons.inputPlayerId)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1021'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1021'));
 
     // Add pagination buttons if more than 1 page (always show, disabled when needed)
     const paginationRow = createUniversalPaginationButtons({
@@ -232,7 +232,7 @@ function createPlayerSelectionEmbed(interaction, players, lang, alliance, page =
                 .replace('{id}', player.fid)
                 .replace('{furnace}', getFurnaceReadable(player.furnace_level, lang) || "Unknown")
                 .replace('{state}', player.state || "Unknown"),
-            emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1026')
+            emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1026')
         }));
 
         const playerSelect = new StringSelectMenuBuilder()
@@ -295,12 +295,12 @@ function createRemovalConfirmationEmbed(players, alliance, interaction, lang) {
                 .setCustomId(`remove_players_confirm_${interaction.user.id}_${alliance.id}_${encodedIds}`)
                 .setLabel(lang.players.removePlayer.buttons.accept)
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004')),
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004')),
             new ButtonBuilder()
                 .setCustomId(`remove_players_cancel_${interaction.user.id}_${alliance.id}`)
                 .setLabel(lang.players.removePlayer.buttons.cancel)
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'))
         );
 
     const newSection = [
@@ -327,7 +327,7 @@ function createRemovalConfirmationEmbed(players, alliance, interaction, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleRemovePlayersAlliancePagination(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -356,7 +356,7 @@ async function handleRemovePlayersAlliancePagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersAlliancePagination');
+        await handleError(interaction, lang, error, 'handleRemovePlayersAlliancePagination');
     }
 }
 
@@ -365,7 +365,7 @@ async function handleRemovePlayersAlliancePagination(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleRemovePlayersPlayerPagination(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const { userId: expectedUserId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 2);
@@ -393,7 +393,7 @@ async function handleRemovePlayersPlayerPagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersPlayerPagination');
+        await handleError(interaction, lang, error, 'handleRemovePlayersPlayerPagination');
     }
 }
 
@@ -402,7 +402,7 @@ async function handleRemovePlayersPlayerPagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleRemovePlayersAllianceSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -438,7 +438,7 @@ async function handleRemovePlayersAllianceSelection(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersAllianceSelection');
+        await handleError(interaction, lang, error, 'handleRemovePlayersAllianceSelection');
     }
 }
 
@@ -447,7 +447,7 @@ async function handleRemovePlayersAllianceSelection(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleRemovePlayersPlayerSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -482,7 +482,7 @@ async function handleRemovePlayersPlayerSelection(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersPlayerSelection');
+        await handleError(interaction, lang, error, 'handleRemovePlayersPlayerSelection');
     }
 }
 
@@ -491,7 +491,7 @@ async function handleRemovePlayersPlayerSelection(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleRemovePlayersConfirm(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -509,7 +509,7 @@ async function handleRemovePlayersConfirm(interaction) {
             const decodedIds = Buffer.from(encodedIds, 'base64').toString('utf-8');
             playerIds = decodedIds.split(',').map(id => parseInt(id));
         } catch (decodeError) {
-            await sendError(interaction, lang, decodeError, 'handleRemovePlayersConfirm - decoding IDs');
+            await handleError(interaction, lang, decodeError, 'handleRemovePlayersConfirm - decoding IDs');
             return;
         }
 
@@ -534,14 +534,14 @@ async function handleRemovePlayersConfirm(interaction) {
             playerQueries.deletePlayers(fidsToDelete);
             removedCount = playersToRemove.length;
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleRemovePlayersConfirm - batch delete failed', false);
+            await handleError(interaction, lang, error, 'handleRemovePlayersConfirm - batch delete failed', false);
             // Fall back to individual deletion if batch fails
             for (const player of playersToRemove) {
                 try {
                     playerQueries.deletePlayer(player.fid);
                     removedCount++;
                 } catch (individualError) {
-                    await sendError(interaction, lang, individualError, `handleRemovePlayersConfirm - individual delete failed for player ${player.fid}`, false);
+                    await handleError(interaction, lang, individualError, `handleRemovePlayersConfirm - individual delete failed for player ${player.fid}`, false);
                 }
             }
         }
@@ -599,7 +599,7 @@ async function handleRemovePlayersConfirm(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersConfirm');
+        await handleError(interaction, lang, error, 'handleRemovePlayersConfirm');
     }
 }
 
@@ -608,7 +608,7 @@ async function handleRemovePlayersConfirm(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleRemovePlayersAddIds(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const expectedUserId = customIdParts[4]; // remove_players_add_ids_userId_allianceId
@@ -646,7 +646,7 @@ async function handleRemovePlayersAddIds(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersAddIds');
+        await handleError(interaction, lang, error, 'handleRemovePlayersAddIds');
     }
 }
 
@@ -655,7 +655,7 @@ async function handleRemovePlayersAddIds(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction 
  */
 async function handleRemovePlayersIdsModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -731,7 +731,7 @@ async function handleRemovePlayersIdsModal(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersIdsModal');
+        await handleError(interaction, lang, error, 'handleRemovePlayersIdsModal');
     }
 }
 
@@ -760,7 +760,7 @@ function sanitizePlayerIds(input) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleRemovePlayersCancel(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -787,7 +787,7 @@ async function handleRemovePlayersCancel(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemovePlayersCancel');
+        await handleError(interaction, lang, error, 'handleRemovePlayersCancel');
     }
 }
 

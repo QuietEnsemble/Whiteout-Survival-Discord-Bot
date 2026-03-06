@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { notificationQueries, systemLogQueries } = require('../utility/database');
-const { sendError } = require('../utility/commonFunctions');
+const { handleError } = require('../utility/commonFunctions');
 
 /**
  * Parse existing mentions from notification
@@ -178,7 +178,7 @@ class NotificationScheduler {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'NotificationScheduler.initialize');
+            await handleError(null, null, error, 'NotificationScheduler.initialize');
         }
     }
 
@@ -272,7 +272,7 @@ class NotificationScheduler {
                     // Send immediately at exact time
                     await this.sendPreparedNotification(preparedPayload, notification, sendTime, scheduledTime, isLastSend);
                 } catch (error) {
-                    await sendError(null, null, error, `NotificationScheduler.setTimeout - notification ${notification.id}`);
+                    await handleError(null, null, error, `NotificationScheduler.setTimeout - notification ${notification.id}`);
                 }
             }, earlyDelayMs);
 
@@ -419,7 +419,7 @@ class NotificationScheduler {
                             });
                         }
                     } catch (error) {
-                        await sendError(null, null, error, 'NotificationScheduler.prepareNotification - parsing fields');
+                        await handleError(null, null, error, 'NotificationScheduler.prepareNotification - parsing fields');
                     }
                 }
             }
@@ -473,7 +473,7 @@ class NotificationScheduler {
             };
 
         } catch (error) {
-            await sendError(null, null, error, `NotificationScheduler.prepareNotification - notification ${notification.id}`);
+            await handleError(null, null, error, `NotificationScheduler.prepareNotification - notification ${notification.id}`);
             return null;
         }
     }
@@ -521,7 +521,7 @@ class NotificationScheduler {
             }
 
         } catch (error) {
-            await sendError(null, null, error, `NotificationScheduler.sendPreparedNotification - notification ${notification.id}`);
+            await handleError(null, null, error, `NotificationScheduler.sendPreparedNotification - notification ${notification.id}`);
         }
     }
 
@@ -626,7 +626,7 @@ class NotificationScheduler {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'NotificationScheduler.handleNotificationCompletion');
+            await handleError(null, null, error, 'NotificationScheduler.handleNotificationCompletion');
         }
     }
 
@@ -639,7 +639,7 @@ class NotificationScheduler {
             const notification = notificationQueries.getNotificationById(notificationId);
 
             if (!notification) {
-                await sendError(null, null, new Error(`Notification ${notificationId} not found`), 'NotificationScheduler.addNotification');
+                await handleError(null, null, new Error(`Notification ${notificationId} not found`), 'NotificationScheduler.addNotification');
                 return;
             }
 
@@ -650,7 +650,7 @@ class NotificationScheduler {
             this.scheduleNotification(notification);
 
         } catch (error) {
-            await sendError(null, null, error, 'NotificationScheduler.addNotification');
+            await handleError(null, null, error, 'NotificationScheduler.addNotification');
         }
     }
 

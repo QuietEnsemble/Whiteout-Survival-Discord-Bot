@@ -30,9 +30,7 @@ const schemas = {
             added_at TEXT,
             permissions INTEGER DEFAULT 0,
             alliances TEXT,
-            is_owner BOOLEAN DEFAULT 0,
-            language TEXT,
-            custom_emoji INTEGER
+            is_owner BOOLEAN DEFAULT 0
         )
     `,
     custom_emojis: `
@@ -214,7 +212,16 @@ const schemas = {
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             auto_delete BOOLEAN NOT NULL DEFAULT 1,
-            gdrive_token TEXT
+            gdrive_token TEXT,
+            feature_access TEXT DEFAULT '{}'
+        )
+    `,
+    users: `
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            buffs TEXT NOT NULL DEFAULT '{}',
+            language TEXT,
+            custom_emoji INTEGER
         )
     `
 };
@@ -248,6 +255,44 @@ try {
         // Insert placeholder for user-set test ID
         db.prepare(`INSERT INTO test_ids (id, fid, is_default, set_by, set_at) VALUES (2, 40393986, 0, NULL, NULL)`).run();
     }
+
+    // Ensure `feature_access` column exists in settings (safe migration)
+    try {
+        const cols = db.prepare("PRAGMA table_info(settings)").all();
+        const hasFeatureAccess = cols.some(c => c && c.name === 'feature_access');
+        if (!hasFeatureAccess) {
+            db.exec("ALTER TABLE settings ADD COLUMN feature_access TEXT DEFAULT '{}' ");
+        }
+    } catch (e) {
+        console.error('Database migration: failed to ensure feature_access column', e);
+    }
+
+    // Migrate language/custom_emoji from admins → users, then drop those columns from admins
+    try {
+        const adminCols = db.prepare('PRAGMA table_info(admins)').all();
+        const hasLanguage = adminCols.some(c => c.name === 'language');
+        if (hasLanguage) {
+            // Ensure all admins have a users row (inherit their language/emoji)
+            db.exec(`INSERT OR IGNORE INTO users (user_id, language, custom_emoji) SELECT user_id, CASE WHEN language = 'NA' THEN NULL ELSE language END, custom_emoji FROM admins`);
+            // Recreate admins without language/custom_emoji
+            db.exec(`
+                CREATE TABLE admins_migrated (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT UNIQUE NOT NULL,
+                    added_by TEXT,
+                    added_at TEXT,
+                    permissions INTEGER DEFAULT 0,
+                    alliances TEXT,
+                    is_owner BOOLEAN DEFAULT 0
+                )
+            `);
+            db.exec(`INSERT INTO admins_migrated (id, user_id, added_by, added_at, permissions, alliances, is_owner) SELECT id, user_id, added_by, added_at, permissions, alliances, is_owner FROM admins`);
+            db.exec(`DROP TABLE admins`);
+            db.exec(`ALTER TABLE admins_migrated RENAME TO admins`);
+        }
+    } catch (e) {
+        console.error('Database migration: failed to migrate admins language/emoji → users', e);
+    }
 } catch (error) {
     console.error('FATAL: Database initialization failed:', error);
     process.exit(1);
@@ -262,8 +307,8 @@ function getCurrentTimestamp() {
 const adminQueries = {
     // Create admin
     addAdmin: db.prepare(`
-        INSERT INTO admins (user_id, added_by, added_at, permissions, alliances, is_owner, language)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO admins (user_id, added_by, added_at, permissions, alliances, is_owner)
+        VALUES (?, ?, ?, ?, ?, ?)
     `),
 
     // Get admin by user_id
@@ -278,17 +323,8 @@ const adminQueries = {
     // Update admin permissions
     updateAdminPermissions: db.prepare('UPDATE admins SET permissions = ? WHERE user_id = ?'),
 
-    // Update admin language
-    updateAdminLanguage: db.prepare('UPDATE admins SET language = ? WHERE user_id = ?'),
-
     // Update admin alliances
     updateAdminAlliances: db.prepare('UPDATE admins SET alliances = ? WHERE user_id = ?'),
-
-    // Update admin custom emoji set (nullable)
-    updateAdminCustomEmoji: db.prepare('UPDATE admins SET custom_emoji = ? WHERE user_id = ?'),
-
-    // Get admins using a specific custom emoji set
-    getAdminsByCustomEmoji: db.prepare('SELECT user_id FROM admins WHERE custom_emoji = ?'),
 
     // Delete admin
     deleteAdmin: db.prepare('DELETE FROM admins WHERE user_id = ?'),
@@ -691,6 +727,15 @@ const notificationQueries = {
     // Get active notifications
     getActiveNotifications: db.prepare('SELECT * FROM notifications WHERE is_active = 1'),
 
+    // Get private notifications (where guild_id is NULL or empty)
+    getPrivateNotifications: db.prepare("SELECT * FROM notifications WHERE guild_id IS NULL OR guild_id = ''"),
+
+    // Get active private notifications created by specific user
+    getActivePrivateNotificationsByUser: db.prepare("SELECT * FROM notifications WHERE (guild_id IS NULL OR guild_id = '') AND is_active = 1 AND created_by = ?"),
+
+    // Get active private notifications NOT created by specific users (for bulk operations)
+    getActivePrivateNotificationsExcludingUsers: db.prepare("SELECT * FROM notifications WHERE (guild_id IS NULL OR guild_id = '') AND is_active = 1 AND created_by NOT IN (SELECT value FROM json_each(?))"),
+
     // Delete notification
     deleteNotification: db.prepare('DELETE FROM notifications WHERE id = ?')
 };
@@ -948,7 +993,11 @@ const settingsQueries = {
     // Get settings (always returns one row)
     getSettings: db.prepare('SELECT * FROM settings WHERE id = 1'),
     // Initialize settings if not exists
-    initSettings: db.prepare('INSERT OR IGNORE INTO settings (id, auto_delete) VALUES (1, 1)'),
+    initSettings: db.prepare('INSERT OR IGNORE INTO settings (id, auto_delete, feature_access) VALUES (1, 1, \'{}\')'),
+    // Get feature_access JSON string
+    getFeatureAccess: db.prepare('SELECT feature_access FROM settings WHERE id = 1'),
+    // Set feature_access (expects JSON string)
+    setFeatureAccess: db.prepare('UPDATE settings SET feature_access = ? WHERE id = 1'),
     // Update auto_delete setting
     updateAutoDelete: db.prepare('UPDATE settings SET auto_delete = ? WHERE id = 1'),
     // Get Google Drive token
@@ -961,15 +1010,34 @@ const settingsQueries = {
 
 // Initialize settings on startup
 try {
+    // Ensure a settings row exists and include feature_access default
     settingsQueries.initSettings.run();
 } catch (error) {
     // Settings initialization failed - non-critical
 }
 
+// User queries (language, emoji theme, calculator buffs)
+const userQueries = {
+    // Get user record
+    getUser: db.prepare('SELECT * FROM users WHERE user_id = ?'),
+    // Create user record if not exists
+    upsertUser: db.prepare('INSERT OR IGNORE INTO users (user_id) VALUES (?)'),
+    // Get saved buffs for a user
+    getBuffs: db.prepare('SELECT buffs FROM users WHERE user_id = ?'),
+    // Save / update buffs for a user
+    upsertBuffs: db.prepare('INSERT INTO users (user_id, buffs) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET buffs = excluded.buffs'),
+    // Update user language
+    updateLanguage: db.prepare('UPDATE users SET language = ? WHERE user_id = ?'),
+    // Update user custom emoji set
+    updateCustomEmoji: db.prepare('UPDATE users SET custom_emoji = ? WHERE user_id = ?'),
+    // Get users using a specific custom emoji set
+    getUsersByCustomEmoji: db.prepare('SELECT user_id FROM users WHERE custom_emoji = ?')
+};
+
 // Wrapper functions with error handling and current timestamp
-const createAdmin = (userId, addedBy, permissions = 0, alliances = '[]', isOwner = false, language = 'en') => {
+const createAdmin = (userId, addedBy, permissions = 0, alliances = '[]', isOwner = false) => {
     const isOwnerInt = isOwner ? 1 : 0;
-    return adminQueries.addAdmin.run(userId, addedBy, getCurrentTimestamp(), permissions, alliances, isOwnerInt, language);
+    return adminQueries.addAdmin.run(userId, addedBy, getCurrentTimestamp(), permissions, alliances, isOwnerInt);
 };
 
 const createGiftCode = (giftCode, status = 'active', addedBy, source = 'manual', apiPushed = false, isVip = false) => {
@@ -994,6 +1062,7 @@ const migrationQueries = {
         db.prepare('DELETE FROM alliance').run();
         db.prepare('DELETE FROM admin_logs').run();
         db.prepare('DELETE FROM admins').run();
+        db.prepare('DELETE FROM users').run();
         db.prepare('DELETE FROM processes').run();
         db.prepare('DELETE FROM notifications').run();
         db.prepare('DELETE FROM gift_codes').run();
@@ -1010,10 +1079,7 @@ module.exports = {
         getAdmin: (userId) => adminQueries.getAdmin.get(userId),
         getAdminById: (id) => adminQueries.getAdminById.get(id),
         updateAdminPermissions: (permissions, userId) => adminQueries.updateAdminPermissions.run(permissions, userId),
-        updateAdminLanguage: (language, userId) => adminQueries.updateAdminLanguage.run(language, userId),
         updateAdminAlliances: (alliances, userId) => adminQueries.updateAdminAlliances.run(alliances, userId),
-        updateAdminCustomEmoji: (customEmojiId, userId) => adminQueries.updateAdminCustomEmoji.run(customEmojiId, userId),
-        getAdminsByCustomEmoji: (customEmojiId) => adminQueries.getAdminsByCustomEmoji.all(customEmojiId),
         deleteAdmin: (userId) => adminQueries.deleteAdmin.run(userId),
         isOwner: (userId) => adminQueries.isOwner.get(userId),
         updateOwnerStatus: (isOwner, userId) => adminQueries.updateOwnerStatus.run(isOwner, userId)
@@ -1215,6 +1281,9 @@ module.exports = {
         getAllNotifications: () => notificationQueries.getAllNotifications.all(),
         getNotificationsByGuild: (guildId) => notificationQueries.getNotificationsByGuild.all(guildId),
         getActiveNotifications: () => notificationQueries.getActiveNotifications.all(),
+        getPrivateNotifications: () => notificationQueries.getPrivateNotifications.all(),
+        getActivePrivateNotificationsByUser: (userId) => notificationQueries.getActivePrivateNotificationsByUser.all(userId),
+        getActivePrivateNotificationsExcludingUsers: (userIds) => notificationQueries.getActivePrivateNotificationsExcludingUsers.all(JSON.stringify(userIds)),
         updateNotification: (id, name, guildId, channelId, hour, minute, messageContent, title, description, color, imageUrl, thumbnailUrl, footer, author, fields, pattern, mention, repeatStatus, repeatFrequency, embedToggle, isActive, lastTrigger, nextTrigger) =>
             notificationQueries.updateNotification.run(name, guildId, channelId, hour, minute, messageContent, title, description, color, imageUrl, thumbnailUrl, footer, author, fields, pattern, mention, repeatStatus, repeatFrequency, embedToggle ? 1 : 0, isActive ? 1 : 0, lastTrigger, nextTrigger, id),
         updateNotificationActiveStatus: (id, isActive) => notificationQueries.updateNotificationActiveStatus.run(isActive ? 1 : 0, id),
@@ -1289,5 +1358,14 @@ module.exports = {
     },
     settingsQueries,
     migrationQueries,
+    userQueries: {
+        getUser: (userId) => userQueries.getUser.get(userId),
+        upsertUser: (userId) => userQueries.upsertUser.run(userId),
+        getBuffs: (userId) => userQueries.getBuffs.get(userId),
+        upsertBuffs: (userId, buffs) => userQueries.upsertBuffs.run(userId, buffs),
+        updateLanguage: (language, userId) => userQueries.updateLanguage.run(language, userId),
+        updateCustomEmoji: (setId, userId) => userQueries.updateCustomEmoji.run(setId, userId),
+        getUsersByCustomEmoji: (setId) => userQueries.getUsersByCustomEmoji.all(setId)
+    },
     getCurrentTimestamp
 };

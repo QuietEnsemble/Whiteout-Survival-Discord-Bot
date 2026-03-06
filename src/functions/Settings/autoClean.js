@@ -4,8 +4,8 @@ const {
     MessageFlags
 } = require('discord.js');
 const { settingsQueries } = require('../utility/database');
-const { getAdminLang, sendError, assertUserMatches } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { getUserInfo, handleError, assertUserMatches } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 
 /**
  * Creates an auto-delete toggle button
@@ -19,7 +19,7 @@ function createAutoDeleteButton(userId, lang, isEnabled) {
         .setCustomId(`toggle_auto_delete_${userId}`)
         .setLabel(lang.settings.mainPage.buttons.autoDelete)
         .setStyle(isEnabled ? ButtonStyle.Success : ButtonStyle.Secondary)
-        .setEmoji(isEnabled ? getComponentEmoji(getEmojiMapForAdmin(userId), '1004') : getComponentEmoji(getEmojiMapForAdmin(userId), '1051'));
+        .setEmoji(isEnabled ? getComponentEmoji(getEmojiMapForUser(userId), '1004') : getComponentEmoji(getEmojiMapForUser(userId), '1051'));
 }
 
 /**
@@ -27,7 +27,7 @@ function createAutoDeleteButton(userId, lang, isEnabled) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleToggleAutoDelete(interaction) {
-    const { adminData, lang } = await getAdminLang(interaction.user.id);
+    const { adminData, lang } = await getUserInfo(interaction.user.id);
     try {
         // Verify user
         const expectedUserId = interaction.customId.split('_')[3]; // toggle_auto_delete_userId
@@ -56,7 +56,7 @@ async function handleToggleAutoDelete(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleToggleAutoDelete');
+        await handleError(interaction, lang, error, 'handleToggleAutoDelete');
     }
 }
 

@@ -14,8 +14,8 @@ const {
 const { giftCodeChannelQueries, giftCodeQueries, allianceQueries, playerQueries, systemLogQueries, idChannelQueries } = require('../utility/database');
 const { createRedeemProcess } = require('./redeemFunction');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 // Global cache for gift code channels
 global.giftCodeChannelCache = new Map();
@@ -42,7 +42,7 @@ async function initializeGiftCodeChannelCache() {
         });
 
     } catch (error) {
-        await sendError(null, null, error, 'initializeGiftCodeChannelCache', false);
+        await handleError(null, null, error, 'initializeGiftCodeChannelCache', false);
         throw error;
     }
 }
@@ -78,7 +78,7 @@ function createGiftCodeChannelButton(userId, lang = {}) {
         .setCustomId(`gift_code_channel_manage_${userId}`)
         .setLabel(lang.giftCode.giftCodeChannel.buttons.manageChannel)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1014'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1014'));
 }
 
 /**
@@ -86,7 +86,7 @@ function createGiftCodeChannelButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleGiftCodeChannelButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // gift_code_channel_manage_userId
@@ -109,13 +109,13 @@ async function handleGiftCodeChannelButton(interaction) {
             .setCustomId(`gift_code_channel_add_${interaction.user.id}`)
             .setLabel(lang.giftCode.giftCodeChannel.buttons.add)
             .setStyle(ButtonStyle.Success)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1000')); // plus emoji
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1000')); // plus emoji
 
         const removeButton = new ButtonBuilder()
             .setCustomId(`gift_code_channel_remove_${interaction.user.id}`)
             .setLabel(lang.giftCode.giftCodeChannel.buttons.remove)
             .setStyle(ButtonStyle.Danger)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1031')); // minus emoji
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1031')); // minus emoji
 
         const row = new ActionRowBuilder().addComponents(addButton, removeButton);
 
@@ -142,7 +142,7 @@ async function handleGiftCodeChannelButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeChannelButton');
+        await handleError(interaction, lang, error, 'handleGiftCodeChannelButton');
     }
 }
 
@@ -151,7 +151,7 @@ async function handleGiftCodeChannelButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleGiftCodeChannelAdd(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // gift_code_channel_add_userId
@@ -200,7 +200,7 @@ async function handleGiftCodeChannelAdd(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeChannelAdd');
+        await handleError(interaction, lang, error, 'handleGiftCodeChannelAdd');
     }
 }
 
@@ -209,7 +209,7 @@ async function handleGiftCodeChannelAdd(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleGiftCodeChannelRemove(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // gift_code_channel_remove_userId
@@ -246,7 +246,7 @@ async function handleGiftCodeChannelRemove(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeChannelRemove');
+        await handleError(interaction, lang, error, 'handleGiftCodeChannelRemove');
     }
 }
 
@@ -278,7 +278,7 @@ function createChannelRemovalContainer(interaction, giftCodeChannels, lang) {
         return {
             label: channelName,
             value: channel.id.toString(),
-            emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1014')
+            emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1014')
         };
     });
 
@@ -315,7 +315,7 @@ function createChannelRemovalContainer(interaction, giftCodeChannels, lang) {
  * @param {import('discord.js').ChannelSelectMenuInteraction} interaction 
  */
 async function handleGiftCodeChannelSelect(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract user ID from custom ID
@@ -377,17 +377,6 @@ async function handleGiftCodeChannelSelect(interaction) {
             createdAt: newChannelData.created_at
         });
 
-        systemLogQueries.addLog(
-            'info',
-            `Gift code channel added: ${selectedChannel.name}`,
-            JSON.stringify({
-                channel_id: selectedChannelId,
-                channel_name: selectedChannel.name,
-                linked_by: interaction.user.id,
-                function: 'handleGiftCodeChannelSelect'
-            })
-        );
-
         const container = [
             new ContainerBuilder()
                 .setAccentColor(0x2ecc71) // green
@@ -407,7 +396,7 @@ async function handleGiftCodeChannelSelect(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeChannelSelect');
+        await handleError(interaction, lang, error, 'handleGiftCodeChannelSelect');
     }
 }
 
@@ -416,7 +405,7 @@ async function handleGiftCodeChannelSelect(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleGiftCodeChannelRemoveSelect(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[5]; // gift_code_channel_remove_select_userId
@@ -450,16 +439,6 @@ async function handleGiftCodeChannelRemoveSelect(interaction) {
         // Remove from cache
         updateGiftCodeChannelCache(channelData.channel_id, null);
 
-        systemLogQueries.addLog(
-            'info',
-            `Gift code channel removed: ${channelData.channel_id}`,
-            JSON.stringify({
-                channel_id: channelData.channel_id,
-                removed_by: interaction.user.id,
-                function: 'handleGiftCodeChannelRemoveSelect'
-            })
-        );
-
         const container = [
             new ContainerBuilder()
                 .setAccentColor(0xff6b6b) // red
@@ -478,7 +457,7 @@ async function handleGiftCodeChannelRemoveSelect(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeChannelRemoveSelect');
+        await handleError(interaction, lang, error, 'handleGiftCodeChannelRemoveSelect');
     }
 }
 
@@ -490,8 +469,8 @@ async function handleGiftCodeChannelMessage(message) {
     // Ignore bot messages
     if (message.author.bot) return;
 
-    const { lang } = getAdminLang(message.author.id);
-    const emojiMap = getEmojiMapForAdmin(message.author.id);
+    const { lang } = getUserInfo(message.author.id);
+    const emojiMap = getEmojiMapForUser(message.author.id);
     const receivedEmoji = emojiMap['1017'] || 'ℹ️';
 
     try {
@@ -546,18 +525,6 @@ async function handleGiftCodeChannelMessage(message) {
         // Set last_validated timestamp
         giftCodeQueries.updateLastValidated(giftCode);
 
-        systemLogQueries.addLog(
-            'info',
-            `Gift code added via channel: ${giftCode}`,
-            JSON.stringify({
-                gift_code: giftCode,
-                added_by: message.author.id,
-                channel_id: message.channel.id,
-                is_vip: isVipCode,
-                function: 'handleGiftCodeChannelMessage'
-            })
-        );
-
         // Reply with success
         await message.reactions.cache.filter(r => r.me).first()?.remove();
         await message.react(emojiMap['1004'] || '✅');
@@ -567,7 +534,7 @@ async function handleGiftCodeChannelMessage(message) {
         try {
             await startAutoRedeemForAlliances(giftCode, message.author.id, lang);
         } catch (error) {
-            await sendError(null, lang, error, 'startAutoRedeemForAlliances', false);
+            await handleError(null, lang, error, 'startAutoRedeemForAlliances', false);
             // Change reaction to failed
             await message.reactions.cache.filter(r => r.me).first()?.remove();
             await message.react(emojiMap['1051'] || '❌');
@@ -575,7 +542,7 @@ async function handleGiftCodeChannelMessage(message) {
         }
 
     } catch (error) {
-        await sendError(null, lang, error, 'handleGiftCodeChannelMessage', false);
+        await handleError(null, lang, error, 'handleGiftCodeChannelMessage', false);
         try {
             await message.reply(lang.common.error);
         } catch (replyError) {

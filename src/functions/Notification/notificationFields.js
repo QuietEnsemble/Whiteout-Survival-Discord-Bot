@@ -4,8 +4,10 @@
  */
 const { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder } = require('discord.js');
 const { notificationQueries } = require('../utility/database');
-const { getAdminLang, assertUserMatches, sendError } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
 const { extractMentionTags, parseMentions, calculateEmbedSize } = require('./notificationUtils');
+const { PERMISSIONS } = require('../Settings/admin/permissions');
+const { checkFeatureAccess } = require('../utility/checkAccess');
 
 // Import reference to showTagSelectionMenu from mentions module (will be set by createNotification)
 let showTagSelectionMenuRef = null;
@@ -24,7 +26,7 @@ function setModuleReferences(showTagSelectionMenu, showEmbedEditor) {
  * Handle add field button
  */
 async function handleAddFieldButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const parts = interaction.customId.split('_'); // notification_field_add_{notificationId}_{userId}
         const notificationId = parts[3];
@@ -40,6 +42,17 @@ async function handleAddFieldButton(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionAdd = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureAdd = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionAdd) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureAdd) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         // Check field limit (max 25)
@@ -102,7 +115,7 @@ async function handleAddFieldButton(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddFieldButton');
+        await handleError(interaction, lang, error, 'handleAddFieldButton');
     }
 }
 
@@ -110,7 +123,7 @@ async function handleAddFieldButton(interaction) {
  * Handle add field modal submission
  */
 async function handleAddFieldModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_'); // notification_field_add_modal_{notificationId}_{userId}
@@ -133,6 +146,17 @@ async function handleAddFieldModal(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionModal = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureModal = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionModal) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureModal) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         // Parse existing fields
@@ -211,10 +235,10 @@ async function handleAddFieldModal(interaction) {
             }
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleAddFieldModal');
+            await handleError(interaction, lang, dbError, 'handleAddFieldModal');
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddFieldModal');
+        await handleError(interaction, lang, error, 'handleAddFieldModal');
     }
 }
 
@@ -222,7 +246,7 @@ async function handleAddFieldModal(interaction) {
  * Handle remove field button - Show select menu
  */
 async function handleRemoveFieldButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -238,6 +262,17 @@ async function handleRemoveFieldButton(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionRem = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureRem = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionRem) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureRem) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         let fields = [];
@@ -279,7 +314,7 @@ async function handleRemoveFieldButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveFieldButton');
+        await handleError(interaction, lang, error, 'handleRemoveFieldButton');
     }
 }
 
@@ -287,7 +322,7 @@ async function handleRemoveFieldButton(interaction) {
  * Handle remove field select menu - remove the selected fields
  */
 async function handleRemoveFieldSelect(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -314,7 +349,7 @@ async function handleRemoveFieldSelect(interaction) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleRemoveFieldSelect - parsing fields', false);
+            await handleError(interaction, lang, error, 'handleRemoveFieldSelect - parsing fields', false);
             fields = [];
         }
 
@@ -396,7 +431,7 @@ async function handleRemoveFieldSelect(interaction) {
                     await editorMessage.edit(payload);
                 }
             } catch (msgError) {
-                await sendError(interaction, lang, msgError, 'handleRemoveFieldSelect - updating editor message', false);
+                await handleError(interaction, lang, msgError, 'handleRemoveFieldSelect - updating editor message', false);
             }
 
             // Dismiss ephemeral message
@@ -407,11 +442,11 @@ async function handleRemoveFieldSelect(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleRemoveFieldSelect', false);
+            await handleError(interaction, lang, dbError, 'handleRemoveFieldSelect', false);
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveFieldSelect');
+        await handleError(interaction, lang, error, 'handleRemoveFieldSelect');
     }
 }
 
@@ -419,7 +454,7 @@ async function handleRemoveFieldSelect(interaction) {
  * Handle reorder fields button
  */
 async function handleReorderFieldsButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -436,13 +471,24 @@ async function handleReorderFieldsButton(interaction) {
             });
         }
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionReorder = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureReorder = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionReorder) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureReorder) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         let fields = [];
         try {
             if (notification.fields) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleReorderFieldsFromSelect - parsing fields');
+            await handleError(interaction, lang, error, 'handleReorderFieldsFromSelect - parsing fields');
             fields = [];
         }
 
@@ -474,7 +520,7 @@ async function handleReorderFieldsButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleReorderFieldsButton');
+        await handleError(interaction, lang, error, 'handleReorderFieldsButton');
     }
 }
 
@@ -482,7 +528,7 @@ async function handleReorderFieldsButton(interaction) {
  * Handle reorder fields "from" select menu - show "to" select menu
  */
 async function handleReorderFieldsFromSelect(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -502,13 +548,24 @@ async function handleReorderFieldsFromSelect(interaction) {
             });
         }
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionReorderFrom = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureReorderFrom = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionReorderFrom) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureReorderFrom) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         let fields = [];
         try {
             if (notification.fields) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleReorderFieldsFromSelect - parsing fields');
+            await handleError(interaction, lang, error, 'handleReorderFieldsFromSelect - parsing fields');
             fields = [];
         }
 
@@ -551,7 +608,7 @@ async function handleReorderFieldsFromSelect(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleReorderFieldsFromSelect');
+        await handleError(interaction, lang, error, 'handleReorderFieldsFromSelect');
     }
 }
 
@@ -559,7 +616,7 @@ async function handleReorderFieldsFromSelect(interaction) {
  * Handle reorder fields "to" select menu - perform the reorder
  */
 async function handleReorderFieldsToSelect(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -580,13 +637,24 @@ async function handleReorderFieldsToSelect(interaction) {
             });
         }
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionReorderTo = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureReorderTo = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionReorderTo) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureReorderTo) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         let fields = [];
         try {
             if (notification.fields) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleReorderFieldsToSelect - parsing fields');
+            await handleError(interaction, lang, error, 'handleReorderFieldsToSelect - parsing fields');
             fields = [];
         }
 
@@ -675,7 +743,7 @@ async function handleReorderFieldsToSelect(interaction) {
                     await editorMessage.edit(payload);
                 }
             } catch (msgError) {
-                await sendError(interaction, lang, msgError, 'handleReorderFieldsToSelect - updating editor message');
+                await handleError(interaction, lang, msgError, 'handleReorderFieldsToSelect - updating editor message');
             }
 
             // Dismiss ephemeral message
@@ -686,11 +754,11 @@ async function handleReorderFieldsToSelect(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleReorderFieldsModal');
+            await handleError(interaction, lang, dbError, 'handleReorderFieldsModal');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleReorderFieldsModal');
+        await handleError(interaction, lang, error, 'handleReorderFieldsModal');
     }
 }
 
@@ -753,7 +821,7 @@ async function showEditFieldModal(interaction, notificationId, fieldIndex, field
 
         await interaction.showModal(modal);
     } catch (error) {
-        await sendError(interaction, lang, error, 'showEditFieldModal');
+        await handleError(interaction, lang, error, 'showEditFieldModal');
     }
 }
 
@@ -761,7 +829,7 @@ async function showEditFieldModal(interaction, notificationId, fieldIndex, field
  * Handle edit field button
  */
 async function handleEditFieldButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_'); // notification_field_edit_{notificationId}_{userId}
@@ -780,13 +848,24 @@ async function handleEditFieldButton(interaction) {
             });
         }
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionEdit = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureEdit = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionEdit) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureEdit) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         let fields = [];
         try {
             if (notification.fields) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleEditFieldButton - parsing fields');
+            await handleError(interaction, lang, error, 'handleEditFieldButton - parsing fields');
             fields = [];
         }
 
@@ -828,7 +907,7 @@ async function handleEditFieldButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditFieldButton');
+        await handleError(interaction, lang, error, 'handleEditFieldButton');
     }
 }
 
@@ -836,7 +915,7 @@ async function handleEditFieldButton(interaction) {
  * Handle edit field selection from select menu
  */
 async function handleEditFieldSelectMenu(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_'); // notification_field_edit_select_{notificationId}_{userId}_{editorMessageId}
@@ -849,13 +928,31 @@ async function handleEditFieldSelectMenu(interaction) {
         const editorMessageId = parts[6];
 
         const notification = notificationQueries.getNotificationById(parseInt(notificationId));
+        if (!notification) {
+            return await interaction.reply({
+                content: lang.notification.notificationEditor.errors.notificationNotFound,
+                ephemeral: true
+            });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionEditSel = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureEditSel = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionEditSel) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureEditSel) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         let fields = [];
         try {
             if (notification.fields) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleEditFieldSelectMenu - parsing fields');
+            await handleError(interaction, lang, error, 'handleEditFieldSelectMenu - parsing fields');
             fields = [];
         }
 
@@ -875,7 +972,7 @@ async function handleEditFieldSelectMenu(interaction) {
         await showEditFieldModal(interaction, notificationId, fieldNumber, field, lang, editorMessageId, selectMenuMessageId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditFieldSelectMenu');
+        await handleError(interaction, lang, error, 'handleEditFieldSelectMenu');
     }
 }
 
@@ -883,7 +980,7 @@ async function handleEditFieldSelectMenu(interaction) {
  * Handle edit field modal submission
  */
 async function handleEditFieldModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const parts = interaction.customId.split('_'); // notification_field_edit_modal_{notificationId}_{fieldIndex}_{editorMessageId}_{selectMenuMessageId}
         const notificationId = parts[4];
@@ -907,6 +1004,17 @@ async function handleEditFieldModal(interaction) {
             });
         }
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionEditModal = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureEditModal = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionEditModal) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureEditModal) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         // Parse existing fields
         let fields = [];
         try {
@@ -914,7 +1022,7 @@ async function handleEditFieldModal(interaction) {
                 fields = JSON.parse(notification.fields);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleEditFieldModal - parsing fields');
+            await handleError(interaction, lang, error, 'handleEditFieldModal - parsing fields');
             fields = [];
         }
 
@@ -1003,15 +1111,15 @@ async function handleEditFieldModal(interaction) {
                     }
                 }
             } catch (err) {
-                await sendError(interaction, lang, err, 'handleEditFieldModal - updating editor message');
+                await handleError(interaction, lang, err, 'handleEditFieldModal - updating editor message');
             }
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleEditFieldModal');
+            await handleError(interaction, lang, dbError, 'handleEditFieldModal');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditFieldModal');
+        await handleError(interaction, lang, error, 'handleEditFieldModal');
     }
 }
 

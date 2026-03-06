@@ -1,6 +1,6 @@
 const { ButtonBuilder, ButtonStyle, MessageFlags, } = require('discord.js');
-const { getAdminLang, assertUserMatches, sendError } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 /**
  * Creates a back to panel button
@@ -13,7 +13,7 @@ function createBackToPanelButton(userId, lang = {}) {
         .setCustomId(`back_to_panel_${userId}`)
         .setLabel(lang.panel.mainPage.buttons.backToPanel)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1024'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1024'));
 }
 
 /**
@@ -22,32 +22,32 @@ function createBackToPanelButton(userId, lang = {}) {
  */
 async function handleBackToPanelButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // back_to_panel_userId
 
         // Check if the interaction user matches the expected user
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
+        const panel = require('../../commands/panel');
 
-        if (!adminData) {
-            return await interaction.reply({
-                content: lang.common.noPermission,
-                ephemeral: true
+        if (adminData) {
+            const {components}  = panel.createPanelContainer(interaction, adminData, lang);
+            await interaction.update({
+                components: components,
+                flags: MessageFlags.IsComponentsV2
+            });
+        } else {
+            const {components} = panel.createUserPanelContainer(interaction, lang);
+            await interaction.update({
+                components: components,
+                flags: MessageFlags.IsComponentsV2
             });
         }
 
-        // Use centralized panel creation from panel.js
-        const panel = require('../../commands/panel');
-        const { components } = panel.createPanelContainer(interaction, adminData, lang);
-
-        await interaction.update({
-            components: components,
-            flags: MessageFlags.IsComponentsV2
-        });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleBackToPanelButton');
+        await handleError(interaction, lang, error, 'handleBackToPanelButton');
     }
 }
 

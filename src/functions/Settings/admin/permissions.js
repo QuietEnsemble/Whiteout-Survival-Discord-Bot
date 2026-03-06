@@ -7,7 +7,7 @@ const PERMISSIONS = {
     FULL_ACCESS: 1 << 4             // 16
 };
 
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 
 /**
  * Gets permission descriptions using the language system
@@ -16,7 +16,7 @@ const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis
  * @returns {Object} Permission descriptions object
  */
 function getPermissionDescriptions(lang, userId) {
-    const emojiMap = getEmojiMapForAdmin(userId);
+    const emojiMap = getEmojiMapForUser(userId);
     return {
         [PERMISSIONS.ALLIANCE_MANAGEMENT]: {
             name: lang.permissions.alliance.name,

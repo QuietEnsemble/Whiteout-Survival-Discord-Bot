@@ -384,19 +384,6 @@ await queueManager.manageQueue(result);
 // 5. Completion notification sent
 ```
 
-### Handling Rate Limits
-
-```javascript
-// During API call
-if (response.status === 429) {
-    // Pause process for rate limit
-    const resumeTime = Date.now() + API_CONFIG.RATE_LIMIT_DELAY;
-    await queueManager.pauseForRateLimit(processId, resumeTime);
-    
-    // Start next process while waiting
-    await queueManager.startNextProcess();
-}
-```
 
 ### Crash Recovery
 

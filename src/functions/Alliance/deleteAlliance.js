@@ -1,12 +1,12 @@
-const { ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ContainerBuilder, MessageFlags, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
-const { adminQueries, allianceQueries, playerQueries, idChannelQueries, systemLogQueries, adminLogQueries } = require('../utility/database');
+const { ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ContainerBuilder, MessageFlags, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
+const { adminQueries, allianceQueries, playerQueries, idChannelQueries, adminLogQueries } = require('../utility/database');
 const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { stopAutoRefresh } = require('./refreshAlliance');
 const { updateIdChannelCache } = require('../Players/idChannel');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 /**
  * Creates a delete alliance button
@@ -19,7 +19,7 @@ function createDeleteAllianceButton(userId, lang = {}) {
         .setCustomId(`delete_alliance_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.deleteAlliance)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1046'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
 
 /**
@@ -28,7 +28,7 @@ function createDeleteAllianceButton(userId, lang = {}) {
  */
 async function handleDeleteAllianceButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // delete_alliance_userId
@@ -79,7 +79,7 @@ async function handleDeleteAllianceButton(interaction) {
         await showDeleteAllianceSelection(interaction, 0, lang, alliances);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteAllianceButton');
+        await handleError(interaction, lang, error, 'handleDeleteAllianceButton');
     }
 }
 
@@ -136,7 +136,7 @@ async function showDeleteAllianceSelection(interaction, page = 0, lang = {}, all
                     .replace('{playerCount}', playerCount.toString())
                 )
                 .setValue(alliance.id.toString())
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001'))
         );
     });
 
@@ -189,7 +189,7 @@ async function showDeleteAllianceSelection(interaction, page = 0, lang = {}, all
  */
 async function handleDeleteAlliancePagination(interaction) {
     // Get admin language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -201,7 +201,7 @@ async function handleDeleteAlliancePagination(interaction) {
         await showDeleteAllianceSelection(interaction, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteAlliancePagination');
+        await handleError(interaction, lang, error, 'handleDeleteAlliancePagination');
     }
 }
 
@@ -211,7 +211,7 @@ async function handleDeleteAlliancePagination(interaction) {
  */
 async function handleDeleteAllianceSelection(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -265,7 +265,7 @@ async function handleDeleteAllianceSelection(interaction) {
             await requestDeletionApproval(interaction, alliance, playerCount, adminData);
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteAllianceSelection');
+        await handleError(interaction, lang, error, 'handleDeleteAllianceSelection');
     }
 }
 
@@ -284,12 +284,12 @@ async function showDeleteConfirmation(interaction, alliance, playerCount, lang) 
                 .setCustomId(`confirm_delete_alliance_${alliance.id}_${interaction.user.id}`)
                 .setLabel(lang.alliance.deleteAlliance.buttons.confirmDelete)
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004')),
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004')),
             new ButtonBuilder()
                 .setCustomId(`cancel_delete_alliance_${alliance.id}_${interaction.user.id}`)
                 .setLabel(lang.alliance.deleteAlliance.buttons.cancelDelete)
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'))
         );
 
     const container = [
@@ -340,7 +340,7 @@ async function requestDeletionApproval(interaction, alliance, playerCount, reque
         });
     }
 
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     const newSection = [
         new ContainerBuilder()
@@ -369,7 +369,7 @@ async function requestDeletionApproval(interaction, alliance, playerCount, reque
 
     // Send DM to all approvers
     for (const approver of approvers) {
-        const { lang: approverLang } = getAdminLang(approver.user_id);
+        const { lang: approverLang } = getUserInfo(approver.user_id);
         try {
             const approverUser = await interaction.client.users.fetch(approver.user_id);
             const dmActionRow = new ActionRowBuilder()
@@ -378,12 +378,12 @@ async function requestDeletionApproval(interaction, alliance, playerCount, reque
                         .setCustomId(`approve_delete_alliance_${alliance.id}_${requesterAdminData.user_id}_${interaction.user.id}`)
                         .setLabel(approverLang.alliance.deleteAlliance.buttons.approveRequest)
                         .setStyle(ButtonStyle.Danger)
-                        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(approver.user_id), '1004')),
+                        .setEmoji(getComponentEmoji(getEmojiMapForUser(approver.user_id), '1004')),
                     new ButtonBuilder()
                         .setCustomId(`deny_delete_alliance_${alliance.id}_${requesterAdminData.user_id}_${interaction.user.id}`)
                         .setLabel(approverLang.alliance.deleteAlliance.buttons.denyRequest)
                         .setStyle(ButtonStyle.Secondary)
-                        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(approver.user_id), '1051'))
+                        .setEmoji(getComponentEmoji(getEmojiMapForUser(approver.user_id), '1051'))
                 );
 
             const container = [
@@ -417,7 +417,7 @@ async function requestDeletionApproval(interaction, alliance, playerCount, reque
             });
 
         } catch (dmError) {
-            await sendError(interaction, lang, dmError, 'requestDeletionApproval');
+            await handleError(interaction, lang, dmError, 'requestDeletionApproval');
         }
     }
 
@@ -438,7 +438,7 @@ async function requestDeletionApproval(interaction, alliance, playerCount, reque
  */
 async function handleConfirmDeleteAlliance(interaction) {
     // Get admin language preference
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const allianceId = parseInt(customIdParts[3]); // confirm_delete_alliance_allianceId_userId
@@ -458,7 +458,7 @@ async function handleConfirmDeleteAlliance(interaction) {
         await performAllianceDeletion(interaction, allianceId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleConfirmDeleteAlliance');
+        await handleError(interaction, lang, error, 'handleConfirmDeleteAlliance');
     }
 }
 
@@ -468,7 +468,7 @@ async function handleConfirmDeleteAlliance(interaction) {
  */
 async function handleApproveDeleteAlliance(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const allianceId = parseInt(customIdParts[3]); // approve_delete_alliance_allianceId_requesterId_originalInteractionUserId
@@ -486,7 +486,7 @@ async function handleApproveDeleteAlliance(interaction) {
         await performAllianceDeletion(interaction, allianceId, requesterId, true);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleApproveDeleteAlliance');
+        await handleError(interaction, lang, error, 'handleApproveDeleteAlliance');
     }
 }
 
@@ -499,7 +499,7 @@ async function handleApproveDeleteAlliance(interaction) {
  */
 async function performAllianceDeletion(interaction, allianceId, requesterId = null, isApproval = false) {
     // Get admin language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Get alliance data before deletion
         const alliance = allianceQueries.getAllianceById(allianceId);
@@ -535,7 +535,7 @@ async function performAllianceDeletion(interaction, allianceId, requesterId = nu
             try {
                 await stopAutoRefresh(allianceId);
             } catch (autoRefreshError) {
-                await sendError(interaction, lang, autoRefreshError, 'performAllianceDeletion_stopAutoRefresh', false);
+                await handleError(interaction, lang, autoRefreshError, 'performAllianceDeletion_stopAutoRefresh', false);
             }
 
             // Delete the alliance
@@ -631,33 +631,11 @@ async function performAllianceDeletion(interaction, allianceId, requesterId = nu
                 })
             );
 
-            // Log to system for priority updates
-            if (alliancesToUpdate.length > 0) {
-                systemLogQueries.addLog(
-                    'alliance',
-                    `Priority updates after alliance deletion: ${alliancesToUpdate.length} alliances updated, ${adminsUpdated} admins updated`,
-                    JSON.stringify({
-                        deleted_alliance_id: allianceId,
-                        deleted_alliance_name: alliance.name,
-                        deleted_priority: deletedAlliancePriority,
-                        updated_alliances: alliancesToUpdate.map(a => ({
-                            id: a.id,
-                            name: a.name,
-                            old_priority: a.priority,
-                            new_priority: a.priority - 1
-                        })),
-                        admins_updated: adminsUpdated,
-                        function: 'performAllianceDeletion'
-                    })
-                );
-            }
-
-
             // If this was an approval, notify the requester
             if (isApproval && requesterId) {
                 try {
                     // Get the requester language preference
-                    const { lang: reqLang } = getAdminLang(requesterId);
+                    const { lang: reqLang } = getUserInfo(requesterId);
 
                     const requesterUser = await interaction.client.users.fetch(requesterId);
 
@@ -679,15 +657,15 @@ async function performAllianceDeletion(interaction, allianceId, requesterId = nu
                     ];
                     await requesterUser.send({ components: content, flags: MessageFlags.IsComponentsV2 });
                 } catch (notifyError) {
-                    await sendError(interaction, null, notifyError, 'performAllianceDeletion_notifyRequester', false);
+                    await handleError(interaction, null, notifyError, 'performAllianceDeletion_notifyRequester', false);
                 }
             }
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'performAllianceDeletion_databaseError');
+            await handleError(interaction, lang, dbError, 'performAllianceDeletion_databaseError');
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'performAllianceDeletion');
+        await handleError(interaction, lang, error, 'performAllianceDeletion');
     }
 }
 
@@ -697,7 +675,7 @@ async function performAllianceDeletion(interaction, allianceId, requesterId = nu
  */
 async function handleCancelDeleteAlliance(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const expectedUserId = customIdParts[4]; // cancel_delete_alliance_allianceId_userId
@@ -734,7 +712,7 @@ async function handleCancelDeleteAlliance(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleCancelDeleteAlliance');
+        await handleError(interaction, lang, error, 'handleCancelDeleteAlliance');
     }
 }
 
@@ -743,7 +721,7 @@ async function handleCancelDeleteAlliance(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleDenyDeleteAlliance(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const allianceId = parseInt(customIdParts[3]); // deny_delete_alliance_allianceId_requesterId_originalInteractionUserId
@@ -783,7 +761,7 @@ async function handleDenyDeleteAlliance(interaction) {
         // Notify the requester
         try {
             // Get the requester language preference
-            const { lang: reqLang } = getAdminLang(requesterId);
+            const { lang: reqLang } = getUserInfo(requesterId);
 
             const requesterUser = await interaction.client.users.fetch(requesterId);
 
@@ -806,7 +784,7 @@ async function handleDenyDeleteAlliance(interaction) {
 
             await requesterUser.send({ components: content, flags: MessageFlags.IsComponentsV2 });
         } catch (notifyError) {
-            await sendError(interaction, null, notifyError, 'handleDenyDeleteAlliance_notifyRequester', false);
+            await handleError(interaction, null, notifyError, 'handleDenyDeleteAlliance_notifyRequester', false);
         }
 
         // Log the denial
@@ -821,7 +799,7 @@ async function handleDenyDeleteAlliance(interaction) {
         );
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDenyDeleteAlliance');
+        await handleError(interaction, lang, error, 'handleDenyDeleteAlliance');
     }
 }
 

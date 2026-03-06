@@ -9,7 +9,7 @@ const {
 } = require('./createProcesses');
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } = require('discord.js');
 const { adminQueries, allianceQueries, systemLogQueries } = require('../utility/database');
-const { sendError, getAdminLang } = require('../utility/commonFunctions');
+const { handleError, getUserInfo } = require('../utility/commonFunctions');
 
 /**
  * SQLite-based process recovery system for handling bot restarts and crashes
@@ -31,7 +31,7 @@ class ProcessRecovery {
     async sendResumeConfirmation(processData, progress) {
         try {
             const { id: process_id, created_by: admin_id } = processData;
-            const { lang } = getAdminLang(admin_id);
+            const { lang } = getUserInfo(admin_id);
 
             // Create confirmation buttons
             const resumeButton = new ButtonBuilder()
@@ -91,7 +91,7 @@ class ProcessRecovery {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'sendResumeConfirmation function', false);
+            await handleError(null, null, error, 'sendResumeConfirmation function', false);
         }
     }
 
@@ -105,27 +105,17 @@ class ProcessRecovery {
             this.client = client; // Store client reference
 
             // Get statistics before recovery
-            const beforeStats = await queueManager.getQueueStats();
+            await queueManager.getQueueStats();
 
             // Start recovery process
             await this.recoverProcesses();
 
             // Get statistics after recovery
-            const afterStats = await queueManager.getQueueStats();
+            await queueManager.getQueueStats();
 
-            // Log recovery completion
-            systemLogQueries.addLog(
-                'recovery',
-                'Process recovery system initialized',
-                JSON.stringify({
-                    beforeStats,
-                    afterStats,
-                    function: 'initialize'
-                })
-            );
 
         } catch (error) {
-            await sendError(null, null, error, 'initialize function', false);
+            await handleError(null, null, error, 'initialize function', false);
             // Try to initialize again in 30 seconds
             setTimeout(() => this.initialize(client), 30000);
         }
@@ -175,7 +165,7 @@ class ProcessRecovery {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'recoverProcesses function', false);
+            await handleError(null, null, error, 'recoverProcesses function', false);
         } finally {
             this.recoveryInProgress = false;
         }
@@ -217,7 +207,7 @@ class ProcessRecovery {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'handleCrashedProcess function', false);
+            await handleError(null, null, error, 'handleCrashedProcess function', false);
         } finally {
             return false; // Error, no confirmation sent
         }
@@ -246,17 +236,6 @@ class ProcessRecovery {
                     const { autoRefreshManager } = require('../Alliance/refreshAlliance');
                     autoRefreshManager.scheduleNextRefresh(alliance);
                 }
-
-                systemLogQueries.addLog(
-                    'recovery',
-                    `Auto-refresh process ${process.id} expired after 24h, marked as completed and rescheduled`,
-                    JSON.stringify({
-                        processId: process.id,
-                        inactiveHours: Math.round(inactiveTime / (60 * 60 * 1000)),
-                        action: 'expired_and_rescheduled',
-                        function: 'handleCrashedAutoRefresh'
-                    })
-                );
             } else {
                 // Process is recent, check if it has pending work or was mostly done
                 const progress = process.progress || {};
@@ -278,23 +257,9 @@ class ProcessRecovery {
                     // Process has significant pending work, resume it
                     await updateProcessStatus(process.id, PROCESS_STATUS.QUEUED);
                 }
-
-                systemLogQueries.addLog(
-                    'recovery',
-                    `Auto-refresh process ${process.id} handled after crash`,
-                    JSON.stringify({
-                        processId: process.id,
-                        inactiveMinutes: Math.round(inactiveTime / (60 * 1000)),
-                        pending: pending.length,
-                        done: done.length,
-                        action: pending.length === 0 || (done.length / totalPlayers > 0.9) ? 'completed_and_rescheduled' : 'queued',
-                        function: 'handleCrashedAutoRefresh'
-                    })
-                );
             }
-
         } catch (error) {
-            await sendError(null, null, error, 'handleCrashedAutoRefresh function', false);
+            await handleError(null, null, error, 'handleCrashedAutoRefresh function', false);
 
             // On error, mark as completed to prevent blocking
             try {
@@ -313,7 +278,7 @@ class ProcessRecovery {
      */
     async sendCrashRecoveryConfirmation(processData, progress) {
         const { id: process_id, created_by: admin_id } = processData;
-        const { lang } = getAdminLang(admin_id);
+        const { lang } = getUserInfo(admin_id);
         try {
 
             // Mark process as awaiting confirmation
@@ -372,19 +337,6 @@ class ProcessRecovery {
                 );
 
                 if (notifyAdmins.length === 0) {
-                    systemLogQueries.addLog(
-                        'crash_recovery',
-                        `System process ${process_id} crashed, no admins to notify`,
-                        JSON.stringify({
-                            processId: process_id,
-                            createdBy: admin_id,
-                            action: processData.action,
-                            noAdminsFound: true,
-                            autoResumeScheduled: true,
-                            function: 'sendCrashRecoveryConfirmation'
-                        })
-                    );
-
                     // Set up auto-resume since there's no one to notify
                     this.setupAutoResumeTimeout(process_id, admin_id, null);
                     return;
@@ -440,14 +392,14 @@ class ProcessRecovery {
 
                 return;
             } catch (dmError) {
-                await sendError(null, null, dmError, 'sendCrashRecoveryConfirmation DM attempt', false);
+                await handleError(null, null, dmError, 'sendCrashRecoveryConfirmation DM attempt', false);
 
                 // Set up auto-resume since we can't reach the admin
                 this.setupAutoResumeTimeout(process_id, admin_id, null);
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'sendCrashRecoveryConfirmation function', false);
+            await handleError(null, null, error, 'sendCrashRecoveryConfirmation function', false);
         }
     }
 
@@ -460,7 +412,7 @@ class ProcessRecovery {
      */
     setupAutoResumeTimeout(processId, adminId, dmMessage) {
         const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-        const { lang } = getAdminLang(adminId);
+        const { lang } = getUserInfo(adminId);
 
         const timeoutId = setTimeout(async () => {
             try {
@@ -506,20 +458,8 @@ class ProcessRecovery {
                     }
                 }
 
-                // Log the auto-resume
-                systemLogQueries.addLog(
-                    'auto_resume',
-                    `Process ${processId} auto-resumed after timeout`,
-                    JSON.stringify({
-                        processId,
-                        adminId,
-                        timeoutMs: TIMEOUT_MS,
-                        function: 'setupAutoResumeTimeout'
-                    })
-                );
-
             } catch (error) {
-                await sendError(null, null, error, 'auto-resume timeout function', false);
+                await handleError(null, null, error, 'auto-resume timeout function', false);
             }
         }, TIMEOUT_MS);
 
@@ -557,7 +497,7 @@ class ProcessRecovery {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'recoverActiveProcess function', false);
+            await handleError(null, null, error, 'recoverActiveProcess function', false);
         }
     }
 
@@ -598,7 +538,7 @@ class ProcessRecovery {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'recoverPausedProcess function', false);
+            await handleError(null, null, error, 'recoverPausedProcess function', false);
         }
     }
 
@@ -613,16 +553,6 @@ class ProcessRecovery {
             await this.recoverProcesses();
 
             const afterStats = await queueManager.getQueueStats();
-
-            systemLogQueries.addLog(
-                'manual_recovery',
-                'Manual process recovery triggered',
-                JSON.stringify({
-                    beforeStats,
-                    afterStats,
-                    function: 'triggerManualRecovery'
-                })
-            );
 
             return {
                 before: beforeStats,
@@ -668,7 +598,7 @@ class ProcessRecovery {
             };
 
         } catch (error) {
-            await sendError(null, null, error, 'getRecoveryStatus function', false);
+            await handleError(null, null, error, 'getRecoveryStatus function', false);
             return {
                 recoveryInProgress: this.recoveryInProgress,
                 databaseConnected: false,
@@ -685,7 +615,7 @@ class ProcessRecovery {
      * @param {import('discord.js').ButtonInteraction} interaction 
      */
     async handleProcessResume(interaction) {
-        const { lang, adminData } = getAdminLang(interaction.user.id);
+        const { lang, adminData } = getUserInfo(interaction.user.id);
         try {
             const customId = interaction.customId;
             let processId;
@@ -764,21 +694,8 @@ class ProcessRecovery {
                 components: []
             });
 
-            // Log the manual resume
-            systemLogQueries.addLog(
-                isCrashRecovery ? 'crash_manual_resume' : 'manual_resume',
-                `Process ${processId} manually resumed by user`,
-                JSON.stringify({
-                    processId,
-                    resumedBy: interaction.user.id,
-                    processAction: processData.action,
-                    isCrashRecovery,
-                    function: 'handleProcessResume'
-                })
-            );
-
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleProcessResume function');
+            await handleError(interaction, lang, error, 'handleProcessResume function');
         }
     }
 
@@ -787,7 +704,7 @@ class ProcessRecovery {
      * @param {import('discord.js').ButtonInteraction} interaction 
      */
     async handleProcessCancel(interaction) {
-        const { lang, adminData } = getAdminLang(interaction.user.id);
+        const { lang, adminData } = getUserInfo(interaction.user.id);
         try {
             const customId = interaction.customId;
             let processId;
@@ -856,21 +773,8 @@ class ProcessRecovery {
                 components: []
             });
 
-            // Log the cancellation
-            systemLogQueries.addLog(
-                isCrashRecovery ? 'crash_manual_cancel' : 'manual_cancel',
-                `Process ${processId} cancelled by user`,
-                JSON.stringify({
-                    processId,
-                    cancelledBy: interaction.user.id,
-                    processAction: processData.action,
-                    isCrashRecovery,
-                    function: 'handleProcessCancel'
-                })
-            );
-
         } catch (error) {
-            await sendError(interaction, lang, error, 'handleProcessCancel function');
+            await handleError(interaction, lang, error, 'handleProcessCancel function');
         }
     }
 

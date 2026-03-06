@@ -13,8 +13,8 @@ const {
 const { customEmojiQueries } = require('../../utility/database');
 const { EMOJI_DEFINITIONS } = require('../../utility/emojis');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 
 const ITEMS_PER_PAGE = 24;
 
@@ -29,7 +29,7 @@ function createEmojiViewButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_view_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.viewPack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1049'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1049'));
 }
 
 /**
@@ -68,7 +68,7 @@ function getEmojiDisplay(entry) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiViewButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -82,7 +82,7 @@ async function handleEmojiViewButton(interaction) {
 
 		await showEmojiPackSelection(interaction, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiViewButton');
+		await handleError(interaction, lang, error, 'handleEmojiViewButton');
 	}
 }
 
@@ -133,7 +133,7 @@ async function showEmojiPackSelection(interaction, page, lang) {
 				.setLabel(set.name)
 				.setValue(String(set.id))
 				.setDescription(isActive ? lang.settings.theme.viewPack.selectMenu.description.active : lang.settings.theme.viewPack.selectMenu.description.inactive)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), isActive ? '1004' : '1039'))
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), isActive ? '1004' : '1039'))
 		);
 	});
 
@@ -178,13 +178,13 @@ async function showEmojiPackSelection(interaction, page, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiViewPagination(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 		if (!(await assertUserMatches(interaction, userId, lang))) return;
 		await showEmojiPackSelection(interaction, newPage, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiViewPagination');
+		await handleError(interaction, lang, error, 'handleEmojiViewPagination');
 	}
 }
 
@@ -193,7 +193,7 @@ async function handleEmojiViewPagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleEmojiViewSelection(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[3];
@@ -202,7 +202,7 @@ async function handleEmojiViewSelection(interaction) {
 		const setId = parseInt(interaction.values[0], 10);
 		await showEmojiPackDetails(interaction, setId, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiViewSelection');
+		await handleError(interaction, lang, error, 'handleEmojiViewSelection');
 	}
 }
 

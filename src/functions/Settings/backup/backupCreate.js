@@ -3,8 +3,8 @@ const { google } = require('googleapis');
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../../utility/emojis');
 const { settingsQueries } = require('../../utility/database');
 
 /**
@@ -18,7 +18,7 @@ function createBackupCreateButton(userId, lang = {}) {
 		.setCustomId(`db_backup_create_${userId}`)
 		.setLabel(lang.settings.backup.mainPage.buttons.create)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 /**
@@ -26,7 +26,7 @@ function createBackupCreateButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleBackupCreateButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -114,13 +114,13 @@ async function handleBackupCreateButton(interaction) {
 				});
 
 			} else {
-				await sendError(interaction, lang, new Error(result.error || 'Unknown error during backup creation'), 'handleBackupCreateButton');
+				await handleError(interaction, lang, new Error(result.error || 'Unknown error during backup creation'), 'handleBackupCreateButton');
 			}
 		} catch (error) {
-			await sendError(interaction, lang, error, 'handleBackupCreateButton');
+			await handleError(interaction, lang, error, 'handleBackupCreateButton');
 		}
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleBackupCreateButton');
+		await handleError(interaction, lang, error, 'handleBackupCreateButton');
 	}
 }
 
@@ -148,7 +148,7 @@ async function showOAuthSetupGuideStep(interaction, lang, step = 1) {
 		.setCustomId(`db_backup_oauth_guide_back_${step}_${userId}`)
 		.setLabel(lang.settings.backup.backupCreate.buttons.back)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1019'))
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1019'))
 		.setDisabled(step === 1);
 
 	// Next button
@@ -156,7 +156,7 @@ async function showOAuthSetupGuideStep(interaction, lang, step = 1) {
 		.setCustomId(`db_backup_oauth_guide_next_${step}_${userId}`)
 		.setLabel(lang.settings.backup.backupCreate.buttons.next)
 		.setStyle(ButtonStyle.Primary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1034'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1034'));
 
 	buttons.push(backButton, nextButton);
 
@@ -210,7 +210,7 @@ async function showOAuthSetupGuide(interaction, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleOAuthGuideBackButton(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const currentStep = parseInt(parts[5]);
@@ -221,7 +221,7 @@ async function handleOAuthGuideBackButton(interaction) {
 		// Go to previous step
 		await showOAuthSetupGuideStep(interaction, lang, currentStep - 1);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleOAuthGuideBackButton');
+		await handleError(interaction, lang, error, 'handleOAuthGuideBackButton');
 	}
 }
 
@@ -230,7 +230,7 @@ async function handleOAuthGuideBackButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleOAuthGuideNextButton(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const currentStep = parseInt(parts[5]);
@@ -248,7 +248,7 @@ async function handleOAuthGuideNextButton(interaction) {
 			await showOAuthSetupGuideStep(interaction, lang, currentStep + 1);
 		}
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleOAuthGuideNextButton');
+		await handleError(interaction, lang, error, 'handleOAuthGuideNextButton');
 	}
 }
 
@@ -264,13 +264,13 @@ async function showOAuthSetupPrompt(interaction, lang) {
 		.setCustomId(`db_backup_oauth_setup_${userId}`)
 		.setLabel(lang.settings.backup.backupCreate.buttons.submit)
 		.setStyle(ButtonStyle.Success)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1018'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1018'));
 
 	const backToGuideButton = new ButtonBuilder()
 		.setCustomId(`db_backup_oauth_guide_back_7_${userId}`)
 		.setLabel(lang.settings.backup.backupCreate.buttons.backToGuide)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1002'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1002'));
 
 	const actionRow = new ActionRowBuilder().addComponents(backToGuideButton, setupButton);
 
@@ -300,7 +300,7 @@ async function showOAuthSetupPrompt(interaction, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleOAuthSetupButton(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[4];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -331,7 +331,7 @@ async function handleOAuthSetupButton(interaction) {
 
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleOAuthSetupButton');
+		await handleError(interaction, lang, error, 'handleOAuthSetupButton');
 	}
 }
 
@@ -340,7 +340,7 @@ async function handleOAuthSetupButton(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction
  */
 async function handleOAuthModal(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[4];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -371,7 +371,7 @@ async function handleOAuthModal(interaction) {
 		// Show container with auth URL and button to submit code
 		await showAuthorizationStep(interaction, lang, authUrl);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleOAuthModal');
+		await handleError(interaction, lang, error, 'handleOAuthModal');
 	}
 }
 
@@ -388,14 +388,14 @@ async function showAuthorizationStep(interaction, lang, authUrl) {
 		.setCustomId(`db_backup_oauth_guide_back_8_${userId}`)
 		.setLabel(lang.settings.backup.backupCreate.buttons.backToGuide)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1002'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1002'));
 
 	// Create "Submit Code" button
 	const submitCodeButton = new ButtonBuilder()
 		.setCustomId(`db_backup_oauth_code_${userId}`)
 		.setLabel(lang.settings.backup.backupCreate.buttons.authorize)
 		.setStyle(ButtonStyle.Success)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1004'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1004'));
 
 	const actionRow = new ActionRowBuilder().addComponents(backToGuideButton, submitCodeButton);
 
@@ -425,7 +425,7 @@ async function showAuthorizationStep(interaction, lang, authUrl) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleOAuthCodeSubmitButton(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[4];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -448,7 +448,7 @@ async function handleOAuthCodeSubmitButton(interaction) {
 
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleOAuthCodeSubmitButton');
+		await handleError(interaction, lang, error, 'handleOAuthCodeSubmitButton');
 	}
 }
 
@@ -457,7 +457,7 @@ async function handleOAuthCodeSubmitButton(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction
  */
 async function handleOAuthCodeModal(interaction) {
-	const { lang, adminData } = getAdminLang(interaction.user.id);
+	const { lang, adminData } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[5];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -567,10 +567,10 @@ async function handleOAuthCodeModal(interaction) {
 			// TODO: Add admin log entry
 		} catch (outerError) {
 			// Only catch unexpected errors here (e.g., database errors)
-			await sendError(interaction, lang, outerError, 'handleOAuthCodeModal');
+			await handleError(interaction, lang, outerError, 'handleOAuthCodeModal');
 		}
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleOAuthCodeModal');
+		await handleError(interaction, lang, error, 'handleOAuthCodeModal');
 	}
 }
 
@@ -671,12 +671,12 @@ async function cleanupOldBackups(drive, folderId) {
 			try {
 				await drive.files.delete({ fileId: backup.id });
 			} catch (error) {
-				await sendError(null, null, new Error(`Failed to delete old backup "${backup.name}": ${error.message}`), 'cleanupOldBackups', false);
+				await handleError(null, null, new Error(`Failed to delete old backup "${backup.name}": ${error.message}`), 'cleanupOldBackups', false);
 			}
 		}
 
 	} catch (error) {
-		await sendError(null, null, new Error(`Backup cleanup error: ${error.message}`), 'cleanupOldBackups', false);
+		await handleError(null, null, new Error(`Backup cleanup error: ${error.message}`), 'cleanupOldBackups', false);
 		// Don't throw - cleanup failure shouldn't fail the backup creation
 	}
 }
@@ -810,7 +810,7 @@ async function createAndUploadBackup() {
 			webViewLink: file.data.webViewLink
 		};
 	} catch (error) {
-		await sendError(null, null, new Error(`Backup creation error: ${error.message}`), 'createAndUploadBackup', false);
+		await handleError(null, null, new Error(`Backup creation error: ${error.message}`), 'createAndUploadBackup', false);
 		return {
 			success: false,
 			error: error.message

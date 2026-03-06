@@ -1,5 +1,5 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 /**
  * Universal pagination helper for consistent button creation across all features
@@ -50,7 +50,7 @@ function createUniversalPaginationButtons(options) {
             .setCustomId(prevId)
             .setLabel(lang.pagination.buttons.previous)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1019'))
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1019'))
             .setDisabled(currentPage === 0)
     );
 
@@ -60,7 +60,7 @@ function createUniversalPaginationButtons(options) {
             .setCustomId(nextId)
             .setLabel(lang.pagination.buttons.next)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1034'))
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1034'))
             .setDisabled(currentPage >= totalPages - 1)
     );
 

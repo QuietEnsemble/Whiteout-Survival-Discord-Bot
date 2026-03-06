@@ -1,10 +1,10 @@
 const { EmbedBuilder } = require('discord.js');
 const { getProcessById, updateProcessStatus, updateProcessProgress, createProcess } = require('../Processes/createProcesses');
 const { queueManager } = require('../Processes/queueManager');
-const { allianceQueries, playerQueries, systemLogQueries, furnaceChangeQueries, nicknameChangeQueries, settingsQueries } = require('../utility/database');
+const { allianceQueries, playerQueries, furnaceChangeQueries, nicknameChangeQueries, settingsQueries } = require('../utility/database');
 const languages = require('../../i18n');
 const { getFurnaceReadable } = require('../Players/furnaceReadable');
-const { sendError, getRefreshTimeout, formatRefreshInterval } = require('../utility/commonFunctions');
+const { handleError, getRefreshTimeout, formatRefreshInterval } = require('../utility/commonFunctions');
 const { replaceEmojiPlaceholders, getGlobalEmojiMap } = require('./../utility/emojis');
 const { API_CONFIG } = require('../utility/apiConfig');
 const { fetchPlayerData: fetchPlayerFromAPIShared } = require('../utility/apiClient');
@@ -73,7 +73,7 @@ class AutoRefreshManager {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'initializeAutoRefresh', false);
+            await handleError(null, null, error, 'initializeAutoRefresh', false);
         }
     }
 
@@ -102,7 +102,7 @@ class AutoRefreshManager {
             await this.createRefreshProcess(alliance);
 
         } catch (error) {
-            await sendError(null, null, error, 'startAutoRefresh', false);
+            await handleError(null, null, error, 'startAutoRefresh', false);
         }
     }
 
@@ -133,7 +133,7 @@ class AutoRefreshManager {
                 }
 
             } catch (error) {
-                await sendError(null, null, error, 'scheduleNextRefresh', false);
+                await handleError(null, null, error, 'scheduleNextRefresh', false);
                 // Retry scheduling after 5 minutes on error
                 setTimeout(() => this.scheduleNextRefresh(alliance), 5 * 60 * 1000);
             }
@@ -184,7 +184,7 @@ class AutoRefreshManager {
             await queueManager.manageQueue(processResult);
 
         } catch (error) {
-            await sendError(null, null, error, 'createRefreshProcess', false);
+            await handleError(null, null, error, 'createRefreshProcess', false);
         }
     }
 
@@ -209,7 +209,7 @@ class AutoRefreshManager {
 
             // Fetch channel dynamically (even if it changed since process creation)
             if (!this.client) {
-                await sendError(null, null, new Error('Discord client not initialized'), 'executeAutoRefresh', false);
+                await handleError(null, null, new Error('Discord client not initialized'), 'executeAutoRefresh', false);
                 // Clean up active refresh tracking - process will be marked as failed by executeProcesses.js
                 this.activeRefreshes.delete(alliance.id);
                 return;
@@ -218,7 +218,7 @@ class AutoRefreshManager {
             // Fetch from API instead of cache to get the latest channel
             const channel = await this.client.channels.fetch(alliance.channel_id).catch(() => null);
             if (!channel) {
-                await sendError(null, null, new Error(`Channel ${alliance.channel_id} not found for alliance ${alliance.name}`), 'executeAutoRefresh', false);
+                await handleError(null, null, new Error(`Channel ${alliance.channel_id} not found for alliance ${alliance.name}`), 'executeAutoRefresh', false);
                 // Clean up active refresh tracking - process will be marked as failed by executeProcesses.js
                 this.activeRefreshes.delete(alliance.id);
                 return;
@@ -230,7 +230,7 @@ class AutoRefreshManager {
             await this.refreshAllianceData(processId, processData, alliance, channel, lang);
 
         } catch (error) {
-            await sendError(null, null, error, 'executeAutoRefresh', false);
+            await handleError(null, null, error, 'executeAutoRefresh', false);
             // Mark process as failed and clean up
             try {
                 await updateProcessStatus(processId, 'failed');
@@ -242,7 +242,7 @@ class AutoRefreshManager {
                     }
                 }
             } catch (cleanupError) {
-                await sendError(null, null, cleanupError, 'executeAutoRefresh_cleanup', false);
+                await handleError(null, null, cleanupError, 'executeAutoRefresh_cleanup', false);
             }
         }
     }
@@ -330,7 +330,7 @@ class AutoRefreshManager {
                                 // console.log(`Player ${playerId} does not exist (exist count: ${playerData?.exist || 0}/3), keeping in database`);
                             }
                         } catch (dbError) {
-                            await sendError(null, null, dbError, 'executeAutoRefresh', false);
+                            await handleError(null, null, dbError, 'executeAutoRefresh', false);
                         }
 
                         await this.movePlayerToStatus(processId, playerId, 'pending', 'done');
@@ -343,7 +343,7 @@ class AutoRefreshManager {
 
                     // Handle other errors
                     if (!apiData || apiData.error) {
-                        await sendError(null, null, new Error(`Failed to fetch data for player ${playerId}: ${apiData?.error || 'Unknown error'}`), 'executeAutoRefresh', false);
+                        await handleError(null, null, new Error(`Failed to fetch data for player ${playerId}: ${apiData?.error || 'Unknown error'}`), 'executeAutoRefresh', false);
                         await this.movePlayerToStatus(processId, playerId, 'pending', 'failed');
                         failed++;
                         processed++;
@@ -357,7 +357,7 @@ class AutoRefreshManager {
                         try {
                             playerQueries.resetPlayerExist(playerId);
                         } catch (dbError) {
-                            await sendError(null, null, dbError, 'executeAutoRefresh', false);
+                            await handleError(null, null, dbError, 'executeAutoRefresh', false);
                         }
                     }
 
@@ -397,7 +397,7 @@ class AutoRefreshManager {
                         i--;
                         continue;
                     } else {
-                        await sendError(null, null, error, 'executeAutoRefresh_processPlayer', false);
+                        await handleError(null, null, error, 'executeAutoRefresh_processPlayer', false);
                         await this.movePlayerToStatus(processId, playerId, 'pending', 'failed');
                         failed++;
                         processed++;
@@ -445,7 +445,7 @@ class AutoRefreshManager {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'executeAutoRefresh', false);
+            await handleError(null, null, error, 'executeAutoRefresh', false);
             throw error;
         }
     }
@@ -466,7 +466,7 @@ class AutoRefreshManager {
                 new Date().toISOString()
             );
         } catch (error) {
-            await sendError(null, null, error, 'saveFurnaceChange', false);
+            await handleError(null, null, error, 'saveFurnaceChange', false);
         }
     }
 
@@ -486,7 +486,7 @@ class AutoRefreshManager {
                 new Date().toISOString()
             );
         } catch (error) {
-            await sendError(null, null, error, 'saveNicknameChange', false);
+            await handleError(null, null, error, 'saveNicknameChange', false);
         }
     }
 
@@ -574,7 +574,7 @@ class AutoRefreshManager {
 
 
         } catch (error) {
-            await sendError(null, null, error, 'updatePlayerData', false);
+            await handleError(null, null, error, 'updatePlayerData', false);
             throw error;
         }
     }
@@ -594,7 +594,7 @@ class AutoRefreshManager {
             const freshChannel = await client.channels.fetch(channel.id);
 
             if (!freshChannel) {
-                await sendError(null, null, new Error(`Could not fetch channel ${channel.id} for notifications`), 'sendChangeNotifications', false);
+                await handleError(null, null, new Error(`Could not fetch channel ${channel.id} for notifications`), 'sendChangeNotifications', false);
                 return;
             }
 
@@ -691,7 +691,7 @@ class AutoRefreshManager {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'sendChangeNotifications', false);
+            await handleError(null, null, error, 'sendChangeNotifications', false);
         }
     }
 
@@ -705,41 +705,15 @@ class AutoRefreshManager {
      * @returns {Array} Array of embeds
      */
     createChangeEmbeds(title, items, formatter, color, maxDescriptionLength = 4096) {
+        const safeLimit = Math.min(maxDescriptionLength, 3500);
+
         const embeds = [];
         let currentBatch = [];
         let currentLength = 0;
         let embedCount = 0;
 
-        for (let i = 0; i < items.length; i++) {
-            const formattedItem = formatter(items[i]);
-            const itemLength = formattedItem.length + 1; // +1 for newline
-
-            // Check if adding this item would exceed the limit
-            if (currentLength + itemLength > maxDescriptionLength && currentBatch.length > 0) {
-                // Create embed with current batch
-                embedCount++;
-                const embedTitle = items.length > 1
-                    ? `${title} (${embedCount})`
-                    : title;
-
-                const embed = new EmbedBuilder()
-                    .setTitle(embedTitle)
-                    .setDescription(currentBatch.join('\n'))
-                    .setColor(color);
-
-                embeds.push(embed);
-
-                // Reset for next batch
-                currentBatch = [formattedItem];
-                currentLength = itemLength;
-            } else {
-                currentBatch.push(formattedItem);
-                currentLength += itemLength;
-            }
-        }
-
-        // Add remaining items
-        if (currentBatch.length > 0) {
+        const flushBatch = () => {
+            if (currentBatch.length === 0) return;
             embedCount++;
             const embedTitle = embedCount > 1 || items.length > currentBatch.length
                 ? `${title} (${embedCount})`
@@ -751,7 +725,36 @@ class AutoRefreshManager {
                 .setColor(color);
 
             embeds.push(embed);
+            currentBatch = [];
+            currentLength = 0;
+        };
+
+        for (let i = 0; i < items.length; i++) {
+            let formattedItem = formatter(items[i]);
+            if (formattedItem.length > safeLimit) {
+                for (let start = 0; start < formattedItem.length; start += safeLimit) {
+                    const chunk = formattedItem.slice(start, start + safeLimit);
+                    const chunkLength = chunk.length + 1;
+                    if (currentLength + chunkLength > safeLimit && currentBatch.length > 0) {
+                        flushBatch();
+                    }
+                    currentBatch.push(chunk);
+                    currentLength += chunkLength;
+                }
+                continue; 
+            }
+
+            const itemLength = formattedItem.length + 1; 
+
+            if (currentLength + itemLength > safeLimit && currentBatch.length > 0) {
+                flushBatch();
+            }
+
+            currentBatch.push(formattedItem);
+            currentLength += itemLength;
         }
+
+        flushBatch();
 
         return embeds;
     }
@@ -781,7 +784,7 @@ class AutoRefreshManager {
             await updateProcessProgress(processId, progress);
 
         } catch (error) {
-            await sendError(null, null, error, 'saveChangesToProgress', false);
+            await handleError(null, null, error, 'saveChangesToProgress', false);
         }
     }
 
@@ -818,7 +821,7 @@ class AutoRefreshManager {
             await updateProcessProgress(processId, progress);
 
         } catch (error) {
-            await sendError(null, null, error, 'movePlayerToStatus', false);
+            await handleError(null, null, error, 'movePlayerToStatus', false);
         }
     }
 
@@ -829,7 +832,7 @@ class AutoRefreshManager {
      */
     async fetchPlayerFromAPI(playerId) {
         return fetchPlayerFromAPIShared(playerId, {
-            onError: (error, context) => sendError(null, null, error, context, false),
+            onError: (error, context) => handleError(null, null, error, context, false),
             delay: (ms) => this.delay(ms),
             returnErrorObject: true
         });
@@ -854,13 +857,13 @@ class AutoRefreshManager {
                 try {
                     await updateProcessStatus(activeRefresh.processId, 'completed');
                 } catch (error) {
-                    await sendError(null, null, error, 'stopAutoRefresh', false);
+                    await handleError(null, null, error, 'stopAutoRefresh', false);
                 }
                 this.activeRefreshes.delete(allianceId);
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'stopAutoRefresh', false);
+            await handleError(null, null, error, 'stopAutoRefresh', false);
         }
     }
 
@@ -873,7 +876,7 @@ class AutoRefreshManager {
         try {
             const alliance = allianceQueries.getAllianceById(allianceId);
             if (!alliance) {
-                await sendError(null, null, new Error(`Alliance ${allianceId} not found for restart`), 'restartAutoRefresh', false);
+                await handleError(null, null, new Error(`Alliance ${allianceId} not found for restart`), 'restartAutoRefresh', false);
                 return;
             }
 
@@ -886,7 +889,7 @@ class AutoRefreshManager {
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'restartAutoRefresh', false);
+            await handleError(null, null, error, 'restartAutoRefresh', false);
         }
     }
 
@@ -921,21 +924,8 @@ class AutoRefreshManager {
             // Only schedule the next refresh, don't create a process now (players are already fresh)
             this.scheduleNextRefresh(alliance);
 
-            systemLogQueries.addLog(
-                'auto_refresh_scheduled',
-                `Auto-refresh scheduled for alliance ${alliance.name} after adding players`,
-                JSON.stringify({
-                    allianceId,
-                    allianceName: alliance.name,
-                    playerCount: players.length,
-                    interval: alliance.interval,
-                    nextRefreshIn: `${alliance.interval} minutes`,
-                    function: 'enableAutoRefreshAfterAddingPlayers'
-                })
-            );
-
         } catch (error) {
-            await sendError(null, null, error, 'enableAutoRefreshAfterAddingPlayers', false);
+            await handleError(null, null, error, 'enableAutoRefreshAfterAddingPlayers', false);
         }
     }
 

@@ -1,7 +1,7 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, ContainerBuilder, TextDisplayBuilder, FileBuilder, SeparatorBuilder, SeparatorSpacingSize, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { playerQueries, allianceQueries, adminQueries } = require('../utility/database');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator, encodeExportSelection, decodeExportSelection, checkCustomIdLength, hasPermission } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator, encodeExportSelection, decodeExportSelection, checkCustomIdLength, hasPermission } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 const { getFurnaceReadable, FURNACE_LEVEL_MAPPING } = require('./furnaceReadable');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const fs = require('fs');
@@ -19,7 +19,7 @@ function createExportButton(userId, lang = {}) {
         .setCustomId(`export_panel_${userId}`)
         .setLabel(lang.players.mainPage.buttons.export)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1035'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1035'));
 }
 
 /**
@@ -81,7 +81,7 @@ function buildExportContainer(interaction, lang, encodedSelection, stateDisplay,
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function showExportPanel(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[2];
@@ -131,7 +131,7 @@ async function showExportPanel(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'showExportPanel');
+        await handleError(interaction, lang, error, 'showExportPanel');
     }
 }
 
@@ -139,7 +139,7 @@ async function showExportPanel(interaction) {
  * Handle state filter button click
  */
 async function handleStateFilterButton(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -194,7 +194,7 @@ async function handleStateFilterButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleStateFilterButton');
+        await handleError(interaction, lang, error, 'handleStateFilterButton');
     }
 }
 
@@ -202,7 +202,7 @@ async function handleStateFilterButton(interaction) {
  * Handle state selection from menu
  */
 async function handleStateSelection(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -241,7 +241,7 @@ async function handleStateSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleStateSelection');
+        await handleError(interaction, lang, error, 'handleStateSelection');
     }
 }
 
@@ -249,7 +249,7 @@ async function handleStateSelection(interaction) {
  * Handle alliance filter button click
  */
 async function handleAllianceFilterButton(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -302,7 +302,7 @@ async function handleAllianceFilterButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceFilterButton');
+        await handleError(interaction, lang, error, 'handleAllianceFilterButton');
     }
 }
 
@@ -310,7 +310,7 @@ async function handleAllianceFilterButton(interaction) {
  * Handle alliance selection from menu
  */
 async function handleAllianceSelection(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -348,7 +348,7 @@ async function handleAllianceSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceSelection');
+        await handleError(interaction, lang, error, 'handleAllianceSelection');
     }
 }
 
@@ -356,7 +356,7 @@ async function handleAllianceSelection(interaction) {
  * Handle furnace filter button click
  */
 async function handleFurnaceFilterButton(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -411,7 +411,7 @@ async function handleFurnaceFilterButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleFurnaceFilterButton');
+        await handleError(interaction, lang, error, 'handleFurnaceFilterButton');
     }
 }
 
@@ -419,7 +419,7 @@ async function handleFurnaceFilterButton(interaction) {
  * Handle furnace selection from menu
  */
 async function handleFurnaceSelection(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -457,7 +457,7 @@ async function handleFurnaceSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleFurnaceSelection');
+        await handleError(interaction, lang, error, 'handleFurnaceSelection');
     }
 }
 
@@ -465,7 +465,7 @@ async function handleFurnaceSelection(interaction) {
  * Handle generate CSV button click
  */
 async function handleGenerate(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -567,7 +567,7 @@ async function handleGenerate(interaction) {
         }, 60000); // Delete after 1 minute
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGenerate');
+        await handleError(interaction, lang, error, 'handleGenerate');
     }
 }
 
@@ -717,25 +717,25 @@ function createFilterButton(filterType, userId, encodedSelection, lang, disabled
             customId: `export_filter_state_${userId}_${encodedSelection}`,
             label: lang.players.export.buttons.state,
             style: ButtonStyle.Secondary,
-            emoji: getComponentEmoji(getEmojiMapForAdmin(userId), '1040')
+            emoji: getComponentEmoji(getEmojiMapForUser(userId), '1040')
         },
         alliance: {
             customId: `export_filter_alliance_${userId}_${encodedSelection}`,
             label: lang.players.export.buttons.alliance,
             style: ButtonStyle.Secondary,
-            emoji: getComponentEmoji(getEmojiMapForAdmin(userId), '1001')
+            emoji: getComponentEmoji(getEmojiMapForUser(userId), '1001')
         },
         furnace: {
             customId: `export_filter_furnace_${userId}_${encodedSelection}`,
             label: lang.players.export.buttons.furnace,
             style: ButtonStyle.Secondary,
-            emoji: getComponentEmoji(getEmojiMapForAdmin(userId), '1012')
+            emoji: getComponentEmoji(getEmojiMapForUser(userId), '1012')
         },
         generate: {
             customId: `export_generate_${userId}_${encodedSelection}`,
             label: lang.players.export.buttons.generate,
             style: ButtonStyle.Success,
-            emoji: getComponentEmoji(getEmojiMapForAdmin(userId), '1004')
+            emoji: getComponentEmoji(getEmojiMapForUser(userId), '1004')
         }
     };
 
@@ -963,7 +963,7 @@ function createPaginatedSelectMenu(config) {
  * @param {Object} config - Configuration for the specific filter type
  */
 async function handleGenericPagination(interaction, config) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
 
     try {
         const { userId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 1);
@@ -1015,7 +1015,7 @@ async function handleGenericPagination(interaction, config) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, config.errorContext);
+        await handleError(interaction, lang, error, config.errorContext);
     }
 }
 

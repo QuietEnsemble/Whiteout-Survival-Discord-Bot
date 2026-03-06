@@ -8,9 +8,9 @@ const {
 	SeparatorBuilder,
 	SeparatorSpacingSize
 } = require('discord.js');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
 const { PERMISSIONS } = require('../admin/permissions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { createEmojiShareButton } = require('./emojisExport');
 const { createEmojiUploadButton } = require('./emojisImport');
 
@@ -22,14 +22,14 @@ function createEmojiTemplateButton(userId, lang) {
 		.setCustomId(`emoji_template_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.templateLibrary)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1044'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1044'));
 }
 
 /**
  * Handle Template Library button - shows share/upload options
  */
 async function handleEmojiTemplateButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 
 	try {
 		const expectedUserId = interaction.customId.split('_')[2];
@@ -75,7 +75,7 @@ async function handleEmojiTemplateButton(interaction) {
 		});
 
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiTemplateButton');
+		await handleError(interaction, lang, error, 'handleEmojiTemplateButton');
 	}
 }
 

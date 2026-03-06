@@ -18,8 +18,8 @@ const { adminQueries, allianceQueries, adminLogQueries } = require('../utility/d
 const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { restartAutoRefresh } = require('./refreshAlliance');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator, parseRefreshInterval, formatRefreshInterval } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, parseRefreshInterval, formatRefreshInterval } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 
 /**
@@ -33,7 +33,7 @@ function createCreateAllianceButton(userId, lang = {}) {
         .setCustomId(`create_alliance_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.createAlliance)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 /**
@@ -42,7 +42,7 @@ function createCreateAllianceButton(userId, lang = {}) {
  */
 async function handleCreateAllianceButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // create_alliance_userId
@@ -98,7 +98,7 @@ async function handleCreateAllianceButton(interaction) {
         await interaction.showModal(modal)
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleCreateAllianceButton');
+        await handleError(interaction, lang, error, 'handleCreateAllianceButton');
     }
 }
 
@@ -108,7 +108,7 @@ async function handleCreateAllianceButton(interaction) {
  */
 async function handleCreateAllianceModal(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Check permissions again
         const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.ALLIANCE_MANAGEMENT);
@@ -214,7 +214,7 @@ async function handleCreateAllianceModal(interaction) {
         );
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleCreateAllianceModal');
+        await handleError(interaction, lang, error, 'handleCreateAllianceModal');
     }
 }
 
@@ -224,7 +224,7 @@ async function handleCreateAllianceModal(interaction) {
  */
 async function handleAllianceChannelSelection(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract alliance ID and user ID from custom ID
@@ -340,15 +340,15 @@ async function handleAllianceChannelSelection(interaction) {
                 try {
                     await restartAutoRefresh(allianceId);
                 } catch (autoRefreshError) {
-                    await sendError(interaction, lang, autoRefreshError, 'handleAllianceChannelSelection_autoRefresh', false);
+                    await handleError(interaction, lang, autoRefreshError, 'handleAllianceChannelSelection_autoRefresh', false);
                 }
             }
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleAllianceChannelSelection_databaseError');
+            await handleError(interaction, lang, dbError, 'handleAllianceChannelSelection_databaseError');
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAllianceChannelSelection');
+        await handleError(interaction, lang, error, 'handleAllianceChannelSelection');
     }
 }
 
@@ -393,7 +393,7 @@ async function updateAdminAlliances(allianceId, creatorAdminData) {
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'updateAdminAlliances', false);
+        await handleError(interaction, lang, error, 'updateAdminAlliances', false);
     }
 }
 

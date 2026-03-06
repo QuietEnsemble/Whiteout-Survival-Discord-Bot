@@ -2,8 +2,8 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, C
 const { giftCodeQueries } = require('../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 
 /**
@@ -17,7 +17,7 @@ function createRemoveGiftButton(userId, lang = {}) {
         .setCustomId(`remove_gift_${userId}`)
         .setLabel(lang.giftCode.mainPage.buttons.removeGiftCode)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1046'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
 
 /**
@@ -27,7 +27,7 @@ function createRemoveGiftButton(userId, lang = {}) {
  */
 async function handleRemoveGiftButton(interaction) {
     // Get language preference first (needed for all messages including errors)
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
 
@@ -59,7 +59,7 @@ async function handleRemoveGiftButton(interaction) {
         await displayRemoveGiftPage(interaction, allGiftCodes, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveGiftButton');
+        await handleError(interaction, lang, error, 'handleRemoveGiftButton');
     }
 }
 
@@ -80,7 +80,7 @@ async function displayRemoveGiftPage(interaction, allGiftCodes, page, lang) {
     const pageCodes = allGiftCodes.slice(startIndex, endIndex);
 
     // Build select menu with current page's gift codes
-    const emojiMap = getEmojiMapForAdmin(interaction.user.id);
+    const emojiMap = getEmojiMapForUser(interaction.user.id);
     const options = pageCodes.map(code => ({
         label: code.gift_code,
         description: `${code.status === 'active' ? lang.giftCode.removeGiftCode.content.active : lang.giftCode.removeGiftCode.content.inactive} | ${code.source || 'Unknown'}`,
@@ -141,7 +141,7 @@ async function displayRemoveGiftPage(interaction, allGiftCodes, page, lang) {
  */
 async function handleRemoveGiftPagination(interaction) {
     // Get language preference first 
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
 
         // Parse pagination data from custom ID
@@ -178,7 +178,7 @@ async function handleRemoveGiftPagination(interaction) {
         await displayRemoveGiftPage(interaction, allGiftCodes, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveGiftPagination');
+        await handleError(interaction, lang, error, 'handleRemoveGiftPagination');
     }
 }
 
@@ -189,7 +189,7 @@ async function handleRemoveGiftPagination(interaction) {
  */
 async function handleRemoveGiftSelect(interaction) {
     // Get language preference first 
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract user ID from custom ID for security check
@@ -223,13 +223,13 @@ async function handleRemoveGiftSelect(interaction) {
         const confirmButton = new ButtonBuilder()
             .setCustomId(`remove_gift_confirm_${interaction.user.id}_${encodedCodes}`)
             .setLabel(lang.giftCode.removeGiftCode.buttons.confirm)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004'))
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004'))
             .setStyle(ButtonStyle.Danger);
 
         const cancelButton = new ButtonBuilder()
             .setCustomId(`remove_gift_cancel_${interaction.user.id}`)
             .setLabel(lang.giftCode.removeGiftCode.buttons.cancel)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'))
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'))
             .setStyle(ButtonStyle.Secondary);
 
         const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
@@ -257,7 +257,7 @@ async function handleRemoveGiftSelect(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveGiftSelect');
+        await handleError(interaction, lang, error, 'handleRemoveGiftSelect');
     }
 }
 
@@ -268,7 +268,7 @@ async function handleRemoveGiftSelect(interaction) {
  */
 async function handleRemoveGiftConfirm(interaction) {
     // Get language preference first
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract selected codes from custom ID (base64url-encoded list)
@@ -305,7 +305,7 @@ async function handleRemoveGiftConfirm(interaction) {
                 successCount++;
                 successCodes.push(code);
             } catch (error) {
-                await sendError(interaction, lang, error, 'handleRemoveGiftConfirm', false);
+                await handleError(interaction, lang, error, 'handleRemoveGiftConfirm', false);
                 failedCodes.push(code);
             }
         }
@@ -342,7 +342,7 @@ async function handleRemoveGiftConfirm(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveGiftConfirm');
+        await handleError(interaction, lang, error, 'handleRemoveGiftConfirm');
     }
 }
 
@@ -353,7 +353,7 @@ async function handleRemoveGiftConfirm(interaction) {
  */
 async function handleRemoveGiftCancel(interaction) {
     // Get language preference first
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
 
         // Extract userId from custom ID for security check
@@ -391,7 +391,7 @@ async function handleRemoveGiftCancel(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleRemoveGiftCancel');
+        await handleError(interaction, lang, error, 'handleRemoveGiftCancel');
     }
 }
 

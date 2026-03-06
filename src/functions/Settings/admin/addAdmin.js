@@ -11,10 +11,11 @@ const {
     UserSelectMenuBuilder,
     ThumbnailBuilder
 } = require('discord.js');
-const { adminQueries, adminLogQueries } = require('../../utility/database');
+const { adminQueries, adminLogQueries, userQueries } = require('../../utility/database');
 const { LOG_CODES } = require('../../utility/AdminLogs');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis'); const { adminUsernameCache } = require('../../utility/adminUsernameCache');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis'); 
+const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 /**
  * Creates a manage admins button
  * @param {string} userId - ID of the user who can interact with this button
@@ -24,9 +25,9 @@ const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis
 function createAddAdminButton(userId, lang = {}) {
     return new ButtonBuilder()
         .setCustomId(`add_admin_${userId}`)
-        .setLabel(lang.settings.adminManagement.buttons.addAdmin)
+        .setLabel(lang.settings.adminManagement.mainPage.buttons.addAdmin)
         .setStyle(ButtonStyle.Success)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 /**
@@ -35,7 +36,7 @@ function createAddAdminButton(userId, lang = {}) {
  */
 async function handleAddAdminButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // add_admin_userId
@@ -53,7 +54,7 @@ async function handleAddAdminButton(interaction) {
         // Create user select menu
         const userSelect = new UserSelectMenuBuilder()
             .setCustomId(`select_user_add_admin_${interaction.user.id}`)
-            .setPlaceholder(lang.settings.addAdmin.selectMenu.selectUser.placeholder)
+            .setPlaceholder(lang.settings.adminManagement.addAdmin.selectMenu.selectUser.placeholder)
             .setMinValues(1)
             .setMaxValues(1);
 
@@ -64,8 +65,8 @@ async function handleAddAdminButton(interaction) {
                 .setAccentColor(0x3498db)
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `${lang.settings.addAdmin.content.title.base}\n` +
-                        `${lang.settings.addAdmin.content.description.base}`
+                        `${lang.settings.adminManagement.addAdmin.content.title.base}\n` +
+                        `${lang.settings.adminManagement.addAdmin.content.description.base}`
                     )
                 )
                 .addSeparatorComponents(
@@ -84,7 +85,7 @@ async function handleAddAdminButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddAdminButton');
+        await handleError(interaction, lang, error, 'handleAddAdminButton');
     }
 }
 
@@ -94,7 +95,7 @@ async function handleAddAdminButton(interaction) {
  */
 async function handleAddAdminUserSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[4]; // select_user_add_admin_userId
@@ -118,7 +119,7 @@ async function handleAddAdminUserSelection(interaction) {
         const existingAdmin = adminQueries.getAdmin(selectedUserId);
         if (existingAdmin) {
             return await interaction.reply({
-                content: lang.settings.addAdmin.errors.userAlreadyAdmin.replace('{selectedUser}', `<@${selectedUserId}>`),
+                content: lang.settings.adminManagement.addAdmin.errors.userAlreadyAdmin.replace('{selectedUser}', `<@${selectedUserId}>`),
                 ephemeral: true
             });
         }
@@ -130,10 +131,11 @@ async function handleAddAdminUserSelection(interaction) {
                 interaction.user.id,     // added_by
                 0,                       // permissions (no permissions = 0)
                 '[]',                    // alliances (empty array)
-                0,                       // is_owner (false)
-                'NA'                     // language set to "NA" for new admins
+                0                        // is_owner (false)
             );
 
+            // Ensure a users record exists (new admin will be prompted for language on /panel)
+            userQueries.upsertUser(selectedUserId);
             // Add to username cache
             await adminUsernameCache.add(selectedUserId);
 
@@ -158,8 +160,8 @@ async function handleAddAdminUserSelection(interaction) {
                             )
                             .addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent(
-                                    `${lang.settings.addAdmin.content.title.success}\n` +
-                                    `${lang.settings.addAdmin.content.description.success.replace('{admin}', `<@${selectedUserId}>`)}`
+                                    `${lang.settings.adminManagement.addAdmin.content.title.success}\n` +
+                                    `${lang.settings.adminManagement.addAdmin.content.description.success.replace('{admin}', `<@${selectedUserId}>`)}`
                                 )
                             )
                     )
@@ -174,10 +176,10 @@ async function handleAddAdminUserSelection(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleAddAdminUserSelection_dbError');
+            await handleError(interaction, lang, dbError, 'handleAddAdminUserSelection_dbError');
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddAdminUserSelection');
+        await handleError(interaction, lang, error, 'handleAddAdminUserSelection');
     }
 }
 

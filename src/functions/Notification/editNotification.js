@@ -8,16 +8,21 @@ const {
     SeparatorBuilder,
     SeparatorSpacingSize,
     StringSelectMenuBuilder,
-    EmbedBuilder
+    EmbedBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    LabelBuilder
 } = require('discord.js');
 const { notificationQueries, adminLogQueries } = require('../utility/database');
 const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { notificationScheduler } = require('./notificationScheduler');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
 const { parseMentions, convertTagsToMentions } = require('./notificationUtils');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
+const { checkFeatureAccess } = require('../utility/checkAccess');
 
 const ITEMS_PER_PAGE = 20;
 
@@ -29,34 +34,24 @@ function createEditNotificationButton(userId, lang) {
         .setCustomId(`notification_edit_main_${userId}`)
         .setLabel(lang.notification.editNotification.buttons.editNotification)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1008'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1008'));
 }
 
 /**
  * Handle edit notification button click - show type selection
  */
 async function handleEditNotificationButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[3];
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        // Check permissions
-        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
-
-        if (!hasAccess) {
-            return await interaction.reply({
-                content: lang.common.noPermission,
-                ephemeral: true
-            });
-        }
-
         // Show type selection
         await showTypeSelection(interaction, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditNotificationButton');
+        await handleError(interaction, lang, error, 'handleEditNotificationButton');
     }
 }
 
@@ -64,17 +59,31 @@ async function handleEditNotificationButton(interaction) {
  * Show notification type selection (server or private)
  */
 async function showTypeSelection(interaction, lang) {
+    const { adminData } = getUserInfo(interaction.user.id);
+    // Check permissions
+    const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+    const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+    if (!hasAccess && !hasPrivateFeature) {
+        return await interaction.reply({
+            content: lang.common.noPermission,
+            ephemeral: true
+        })
+    };
+
     const serverButton = new ButtonBuilder()
         .setCustomId(`notification_edit_type_server_${interaction.user.id}`)
         .setLabel(lang.notification.editNotification.buttons.serverNotifications)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022'))
+        .setDisabled(!hasAccess);
 
     const privateButton = new ButtonBuilder()
         .setCustomId(`notification_edit_type_private_${interaction.user.id}`)
         .setLabel(lang.notification.editNotification.buttons.privateNotifications)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1029'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1029'))
+        .setDisabled(!hasPrivateFeature);
 
     const buttonRow = new ActionRowBuilder().addComponents(serverButton, privateButton);
 
@@ -103,11 +112,21 @@ async function showTypeSelection(interaction, lang) {
  * Handle type selection button (server or private)
  */
 async function handleTypeSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const [, , , type, userId] = interaction.customId.split('_');
         if (!(await assertUserMatches(interaction, userId, lang))) return;
+
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+        if (!hasAccess && !hasPrivateFeature) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            })
+        };
 
         // Get filtered notifications using helper function
         const notifications = getFilteredNotifications(type, interaction.user.id, adminData, interaction.guild?.id);
@@ -135,7 +154,7 @@ async function handleTypeSelection(interaction) {
         await showNotificationSelection(interaction, notifications, 1, type, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTypeSelection');
+        await handleError(interaction, lang, error, 'handleTypeSelection');
     }
 }
 
@@ -150,7 +169,7 @@ async function showNotificationSelection(interaction, notifications, page, type,
 
     // Create select menu options
     const options = await Promise.all(pageNotifications.map(async notification => {
-        let channelName = 'Direct Message';
+        let channelName = lang.notification.editNotification.content.channelField.directMessage;
         if (notification.guild_id && notification.channel_id) {
             try {
                 const channel = await interaction.guild.channels.fetch(notification.channel_id);
@@ -167,7 +186,7 @@ async function showNotificationSelection(interaction, notifications, page, type,
             label: notification.name.substring(0, 100),
             value: `notification_${notification.id}`,
             description: description.substring(0, 100),
-            emoji: notification.is_active ? getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022') : getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1052')
+            emoji: notification.is_active ? getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022') : getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1052')
         };
     }));
 
@@ -224,7 +243,7 @@ async function showNotificationSelection(interaction, notifications, page, type,
  * Handle pagination button clicks
  */
 async function handleEditNotificationPagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const { userId, newPage, subtype } = parsePaginationCustomId(interaction.customId, 0);
@@ -238,7 +257,7 @@ async function handleEditNotificationPagination(interaction) {
         await showNotificationSelection(interaction, notifications, newPage, type, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditNotificationPagination');
+        await handleError(interaction, lang, error, 'handleEditNotificationPagination');
     }
 }
 
@@ -246,7 +265,7 @@ async function handleEditNotificationPagination(interaction) {
  * Handle notification selection from dropdown - sends NEW message with edit panel
  */
 async function handleNotificationSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -268,16 +287,17 @@ async function handleNotificationSelection(interaction) {
         }
 
         // Check if user has permission to edit this notification
-        const hasFullAccess = adminData.is_owner || (adminData.permissions & PERMISSIONS.FULL_ACCESS);
         const hasNotificationAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
-        // For server notifications: need notification permission
-        // For private notifications: must be creator
-        const canEdit = notification.guild_id
-            ? hasNotificationAccess
-            : (notification.created_by === interaction.user.id);
+        if (notification.type === 'server' && !hasNotificationAccess) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            });
+        }
 
-        if (!canEdit || !hasFullAccess) {
+        if (notification.type === 'private' && !hasPrivateFeature) {
             return await interaction.reply({
                 content: lang.common.noPermission,
                 ephemeral: true
@@ -291,7 +311,7 @@ async function handleNotificationSelection(interaction) {
         await showNotificationEditPanel(interaction, notification, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleNotificationSelection');
+        await handleError(interaction, lang, error, 'handleNotificationSelection');
     }
 }
 
@@ -408,37 +428,37 @@ async function showNotificationEditPanel(interaction, notification, lang, update
             .setCustomId(`notification_edit_info_${notification.id}_${interaction.user.id}`)
             .setLabel(lang.notification.editNotification.buttons.info)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1038'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1038'));
 
         const contentButton = new ButtonBuilder()
             .setCustomId(`notification_edit_content_${notification.id}_${interaction.user.id}`)
             .setLabel(lang.notification.editNotification.buttons.content)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1008'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1008'));
 
         const repeatButton = new ButtonBuilder()
             .setCustomId(`notification_edit_repeat_${notification.id}_${interaction.user.id}`)
             .setLabel(lang.notification.editNotification.buttons.repeat)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1033'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1033'));
 
         const patternButton = new ButtonBuilder()
             .setCustomId(`notification_edit_pattern_${notification.id}_${interaction.user.id}`)
             .setLabel(lang.notification.editNotification.buttons.pattern)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1025'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1025'));
 
         const saveButton = new ButtonBuilder()
             .setCustomId(`notification_edit_save_${notification.id}_${interaction.user.id}`)
             .setLabel(lang.notification.editNotification.buttons.save)
             .setStyle(ButtonStyle.Success)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1037'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1037'));
 
         const disableButton = new ButtonBuilder()
             .setCustomId(`notification_edit_disable_${notification.id}_${interaction.user.id}`)
             .setLabel(lang.notification.editNotification.buttons.disable)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'))
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'))
             .setDisabled(!notification.is_active);
 
         const buttonRow = new ActionRowBuilder().addComponents(infoButton, contentButton, repeatButton, patternButton, disableButton);
@@ -478,7 +498,7 @@ async function showNotificationEditPanel(interaction, notification, lang, update
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'showNotificationEditPanel');
+        await handleError(interaction, lang, error, 'showNotificationEditPanel');
     }
 }
 
@@ -486,7 +506,7 @@ async function showNotificationEditPanel(interaction, notification, lang, update
  * Handle Info button - opens modal to edit name and trigger time
  */
 async function handleInfoButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -496,6 +516,8 @@ async function handleInfoButton(interaction) {
         if (!(await assertUserMatches(interaction, userId, lang))) return;
 
         const notification = notificationQueries.getNotificationById(parseInt(notificationId));
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
         if (!notification) {
             return await interaction.reply({
@@ -503,6 +525,20 @@ async function handleInfoButton(interaction) {
                 ephemeral: true
             });
         }
+
+        if (notification.type === 'server' && !hasAccess) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            });
+        }
+
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            })
+        };
 
         // Get notification's trigger time for default values (use last_trigger if next_trigger is not set)
         const triggerTimestamp = (notification.next_trigger && notification.next_trigger > 0)
@@ -515,8 +551,6 @@ async function handleInfoButton(interaction) {
         const hours = String(triggerDate.getUTCHours()).padStart(2, '0');
         const minutes = String(triggerDate.getUTCMinutes()).padStart(2, '0');
         const seconds = String(triggerDate.getUTCSeconds()).padStart(2, '0');
-
-        const { ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder } = require('discord.js');
 
         const modal = new ModalBuilder()
             .setCustomId(`notification_edit_info_modal_${notificationId}_${userId}`)
@@ -560,7 +594,7 @@ async function handleInfoButton(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleInfoButton');
+        await handleError(interaction, lang, error, 'handleInfoButton');
     }
 }
 
@@ -568,7 +602,7 @@ async function handleInfoButton(interaction) {
  * Handle Info modal submission - validates and updates notification info
  */
 async function handleInfoModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -617,6 +651,8 @@ async function handleInfoModal(interaction) {
 
         // Get current notification
         const notification = notificationQueries.getNotificationById(parseInt(notificationId));
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
         if (!notification) {
             return await interaction.reply({
@@ -624,6 +660,20 @@ async function handleInfoModal(interaction) {
                 ephemeral: true
             });
         }
+
+        if (notification.type === 'server' && !hasAccess) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            });
+        }
+        
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            })
+        };
 
         // Check if time is in future
         const currentTime = Math.floor(Date.now() / 1000);
@@ -666,13 +716,16 @@ async function handleInfoModal(interaction) {
                     })
                 );
 
-                return await interaction.reply({
+                await interaction.reply({
                     content: lang.notification.editNotification.errors.timeInPast,
                     ephemeral: true
                 });
 
+                const updatedNotification = notificationQueries.getNotificationById(parseInt(notificationId));
+                await showNotificationEditPanel(interaction, updatedNotification, lang, true);
+
             } catch (dbError) {
-                await sendError(interaction, lang, dbError, 'handleInfoModal_updateNameOnly');
+                await handleError(interaction, lang, dbError, 'handleInfoModal_updateNameOnly');
             }
         } else {
             // Time is in future - update everything and set to active
@@ -713,9 +766,6 @@ async function handleInfoModal(interaction) {
                     })
                 );
 
-                // Mark notification as completed since it's now fully configured and active
-                notificationQueries.updateNotificationCompletedStatus(parseInt(notificationId), true);
-
                 // Always update scheduler since we set notification to active
                 await notificationScheduler.removeNotification(parseInt(notificationId));
                 await notificationScheduler.addNotification(parseInt(notificationId));
@@ -731,12 +781,12 @@ async function handleInfoModal(interaction) {
                 await showNotificationEditPanel(interaction, updatedNotification, lang, true);
 
             } catch (dbError) {
-                await sendError(interaction, lang, dbError, 'handleInfoModal_updateAll');
+                await handleError(interaction, lang, dbError, 'handleInfoModal_updateAll');
             }
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleInfoModal');
+        await handleError(interaction, lang, error, 'handleInfoModal');
     }
 }
 
@@ -744,7 +794,7 @@ async function handleInfoModal(interaction) {
  * Handle Content button - opens notification editor
  */
 async function handleContentButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -772,7 +822,7 @@ async function handleContentButton(interaction) {
         await interaction.update(editorPayload);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleContentButton');
+        await handleError(interaction, lang, error, 'handleContentButton');
     }
 }
 
@@ -782,7 +832,7 @@ async function handleContentButton(interaction) {
  * @param {string} type - 'repeat' or 'pattern'
  */
 async function handleSettingsButtonFromEdit(interaction, type = 'repeat') {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -792,6 +842,8 @@ async function handleSettingsButtonFromEdit(interaction, type = 'repeat') {
         if (!(await assertUserMatches(interaction, userId, lang))) return;
 
         const notification = notificationQueries.getNotificationById(parseInt(notificationId));
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
         if (!notification) {
             return await interaction.reply({
@@ -799,6 +851,20 @@ async function handleSettingsButtonFromEdit(interaction, type = 'repeat') {
                 ephemeral: true
             });
         }
+
+        if (notification.type === 'server' && !hasAccess) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            });
+        }
+        
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            })
+        };
 
         // Import notificationSettings dynamically
         const notificationSettings = require('./notificationSettings');
@@ -811,7 +877,7 @@ async function handleSettingsButtonFromEdit(interaction, type = 'repeat') {
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, `handleSettingsButtonFromEdit_${type}`);
+        await handleError(interaction, lang, error, `handleSettingsButtonFromEdit_${type}`);
     }
 }
 
@@ -833,7 +899,7 @@ async function handlePatternButtonFromEdit(interaction) {
  * Handle Save button - updates message, deletes after 3 seconds
  */
 async function handleSaveButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -843,6 +909,8 @@ async function handleSaveButton(interaction) {
         if (!(await assertUserMatches(interaction, userId, lang))) return;
 
         const notification = notificationQueries.getNotificationById(parseInt(notificationId));
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
         if (!notification) {
             return await interaction.reply({
@@ -850,6 +918,20 @@ async function handleSaveButton(interaction) {
                 ephemeral: true
             });
         }
+
+        if (notification.type === 'server' && !hasAccess) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            });
+        }
+        
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            })
+        };
 
         // Update scheduler if notification is active
         if (notification.is_active) {
@@ -884,7 +966,7 @@ async function handleSaveButton(interaction) {
         }, 3000);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleSaveButton');
+        await handleError(interaction, lang, error, 'handleSaveButton');
     }
 }
 
@@ -892,7 +974,7 @@ async function handleSaveButton(interaction) {
  * Handle Disable button - clears next_trigger and removes from scheduler
  */
 async function handleDisableButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -902,6 +984,8 @@ async function handleDisableButton(interaction) {
         if (!(await assertUserMatches(interaction, userId, lang))) return;
 
         const notification = notificationQueries.getNotificationById(notificationId);
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
         if (!notification) {
             return await interaction.reply({
@@ -909,6 +993,20 @@ async function handleDisableButton(interaction) {
                 ephemeral: true
             });
         }
+
+        if (notification.type === 'server' && !hasAccess) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            });
+        }
+        
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({
+                content: lang.common.noPermission,
+                ephemeral: true
+            })
+        };
 
         if (!notification.is_active) {
             return await interaction.reply({
@@ -959,7 +1057,7 @@ async function handleDisableButton(interaction) {
         await showNotificationEditPanel(interaction, updatedNotification, lang, true);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDisableButton');
+        await handleError(interaction, lang, error, 'handleDisableButton');
     }
 }
 
@@ -1018,5 +1116,5 @@ module.exports = {
     handlePatternButtonFromEdit,
     handleSaveButton,
     handleDisableButton,
-    getFilteredNotifications 
+    getFilteredNotifications
 };

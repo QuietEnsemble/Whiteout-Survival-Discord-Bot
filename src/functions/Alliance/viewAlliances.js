@@ -2,8 +2,8 @@ const { ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, S
 const { allianceQueries, playerQueries, adminQueries } = require('../utility/database');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator, formatRefreshInterval } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, formatRefreshInterval } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 
 /**
@@ -17,7 +17,7 @@ function createViewAlliancesButton(userId, lang = {}) {
         .setCustomId(`view_alliances_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.viewAlliances)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1049'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1049'));
 }
 
 /**
@@ -26,7 +26,7 @@ function createViewAlliancesButton(userId, lang = {}) {
  */
 async function handleViewAlliancesButton(interaction) {
     // Get admin data for language
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Check permissions
         const hasFullAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS);
@@ -75,7 +75,7 @@ async function handleViewAlliancesButton(interaction) {
         await showAlliancesPage(interaction, alliances, 0, lang, null);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewAlliancesButton');
+        await handleError(interaction, lang, error, 'handleViewAlliancesButton');
     }
 }
 
@@ -85,7 +85,7 @@ async function handleViewAlliancesButton(interaction) {
  */
 async function handleViewAlliancesPagination(interaction) {
     // Get admin data for language
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract page and selected alliance from custom ID
@@ -141,7 +141,7 @@ async function handleViewAlliancesPagination(interaction) {
         await showAlliancesPage(interaction, alliances, newPage, lang, selectedAllianceId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewAlliancesPagination');
+        await handleError(interaction, lang, error, 'handleViewAlliancesPagination');
     }
 }
 
@@ -184,7 +184,7 @@ async function showAlliancesPage(interaction, alliances, page, lang, selectedAll
                     .replace('{priority}', alliance.priority)
                     .replace('{playerCount}', playerCount)
                 )
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001'))
         );
     }
 
@@ -290,7 +290,7 @@ async function showAlliancesPage(interaction, alliances, page, lang, selectedAll
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleViewAllianceSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -324,7 +324,7 @@ async function handleViewAllianceSelection(interaction) {
         await showAlliancesPage(interaction, alliances, currentPage, lang, selectedAllianceId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewAllianceSelection');
+        await handleError(interaction, lang, error, 'handleViewAllianceSelection');
     }
 }
 

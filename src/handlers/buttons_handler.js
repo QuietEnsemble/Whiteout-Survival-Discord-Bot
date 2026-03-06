@@ -9,6 +9,7 @@ const backUpView = require('../functions/Settings/backup/backupView');
 const backupRestore = require('../functions/Settings/backup/backupRestore');
 const backupReAuth = require('../functions/Settings/backup/backup_reauth');
 const emojis = require('../functions/Settings/theme/emojis');
+const featureAccess = require('../functions/Settings/featureAccess');
 const emojisActivate = require('../functions/Settings/theme/emojisActivate');
 const emojisCreate = require('../functions/Settings/theme/emojisCreate');
 const emojisEdit = require('../functions/Settings/theme/emojisEdit');
@@ -62,6 +63,8 @@ const notificationSettings = require('../functions/Notification/notificationSett
 const templateLibrary = require('../functions/Notification/templateLibrary');
 const shareNotification = require('../functions/Notification/shareNotification');
 const uploadNotification = require('../functions/Notification/uploadNotification');
+const buildings = require('../functions/Calculators/Buildings/buildings');
+const calculators = require('../functions/Calculators/calculators');
 
 
 // === HANDLER REGISTRY ===
@@ -73,6 +76,13 @@ const buttonHandlers = [
     // Settings & Panel
     { pattern: /^settings_/, fn: settings.handleSettingsButton },
     { pattern: /^toggle_auto_delete_/, fn: autoClean.handleToggleAutoDelete },
+    { pattern: /^feature_access_feat_/, fn: featureAccess.handleFeatureAccessFeatureButton },
+    { pattern: /^feature_access_set_/, fn: featureAccess.handleSetFeatureAccess },
+    { pattern: /^feature_access_privateNotifications_(confirm|cancel)_/, fn: featureAccess.handlePrivateNotificationsConfirmCancel },
+    { pattern: /^feature_access_whitelist_add_/, fn: featureAccess.handleWhitelistAddButton },
+    { pattern: /^feature_access_whitelist_remove_/, fn: featureAccess.handleWhitelistRemoveButton },
+    { pattern: /^feature_access_whitelist_/, fn: featureAccess.handleWhitelistChannelsButton },
+    { pattern: /^feature_access_/, fn: featureAccess.handleFeatureAccessButton },
     { pattern: /^auto_update_check_/, fn: autoUpdate.handleAutoUpdateCheck },
     { pattern: /^auto_update_apply_/, fn: autoUpdate.handleAutoUpdateApply },
     { pattern: /^change_language_/, fn: language.handleChangeLanguageButton },
@@ -179,13 +189,13 @@ const buttonHandlers = [
     { pattern: /^(id_channel_remove_prev_|id_channel_remove_next_)/, fn: idChannel.handleIdChannelRemovePagination },
 
     // Move players
+    { pattern: /^(move_players_target_prev_|move_players_target_next_)/, fn: movePlayers.handleMovePlayersTargetPagination },
     { pattern: /^(move_players_source_prev_|move_players_source_next_)/, fn: movePlayers.handleMovePlayersSourcePagination },
-    { pattern: /^(move_players_dest_prev_|move_players_dest_next_)/, fn: movePlayers.handleMovePlayersDestPagination },
     { pattern: /^(move_players_player_prev_|move_players_player_next_)/, fn: movePlayers.handleMovePlayersPlayerPagination },
     { pattern: /^move_players_add_ids_/, fn: movePlayers.handleMovePlayersAddIds },
     { pattern: /^move_players_confirm_wrong_/, fn: movePlayers.handleMovePlayersConfirmWrong },
     { pattern: /^move_players_cancel_wrong_/, fn: movePlayers.handleMovePlayersCancelWrong },
-    { pattern: /^move_players_(?!source_|dest_|player_|prev_|next_|select_|add_|confirm_|cancel_|done_)/, fn: movePlayers.handleMovePlayersButton },
+    { pattern: /^move_players_(?!source_|target_|player_|prev_|next_|select_|add_|confirm_|cancel_|done_)/, fn: movePlayers.handleMovePlayersButton },
 
     // Remove players
     { pattern: /^remove_players_add_ids_/, fn: removePlayers.handleRemovePlayersAddIds },
@@ -268,7 +278,18 @@ const buttonHandlers = [
     { pattern: /^template_share_(?!type_)/, fn: shareNotification.handleShareNotificationButton },
     { pattern: /^template_upload_/, fn: uploadNotification.handleUploadNotificationButton },
     { pattern: /^template_import_type_/, fn: uploadNotification.handleImportTypeSelection },
-    { pattern: /^pagination_template_export_/, fn: shareNotification.handleExportPagination }
+    { pattern: /^pagination_template_export_/, fn: shareNotification.handleExportPagination },
+
+    // Calculators
+    { pattern: /^calc_main_panel_/, fn: calculators.handleCalcMainPanel },
+    { pattern: /^calc_bld_copy_/, fn: buildings.handleBuildingCopyButton },
+    { pattern: /^calc_bld_fprev_|^calc_bld_fnext_/, fn: buildings.handleBuildingFromLevelPage },
+    { pattern: /^calc_bld_tprev_|^calc_bld_tnext_/, fn: buildings.handleBuildingToLevelPage },
+    { pattern: /^calc_building_buffs_/, fn: buildings.handleBuildingBuffsButton },
+    { pattern: /^calc_building_back_/, fn: calculators.handleBuildingBackButton },
+    { pattern: /^calc_building_basic_/, fn: buildings.handleBuildingTypeSelection },
+    { pattern: /^calc_building_fc_/, fn: buildings.handleBuildingTypeSelection },
+    { pattern: /^calc_main_buildings_/, fn: buildings.handleBuildingsButton }
 ];
 
 // === SETUP FUNCTION ===

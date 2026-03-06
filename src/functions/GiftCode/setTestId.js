@@ -3,8 +3,8 @@ const { adminQueries, testIdQueries, systemLogQueries } = require('../utility/da
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { getFurnaceReadable } = require('../Players/furnaceReadable');
 const { fetchPlayerFromAPI } = require('../Players/fetchPlayerData');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 
 /**
  * Creates a set test ID button
@@ -17,7 +17,7 @@ function createSetTestIdButton(userId, lang = {}) {
         .setCustomId(`set_test_id_${userId}`)
         .setLabel(lang.giftCode.mainPage.buttons.setTestId)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1045'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1045'));
 }
 
 /**
@@ -25,7 +25,7 @@ function createSetTestIdButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleSetTestIdButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // set_test_id_userId
@@ -65,7 +65,7 @@ async function handleSetTestIdButton(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleSetTestIdButton');
+        await handleError(interaction, lang, error, 'handleSetTestIdButton');
     }
 }
 
@@ -76,7 +76,7 @@ async function handleSetTestIdButton(interaction) {
  */
 async function handleTestIdModal(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // test_id_modal_userId
@@ -195,7 +195,7 @@ async function handleTestIdModal(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTestIdModal');
+        await handleError(interaction, lang, error, 'handleTestIdModal');
     }
 }
 
@@ -217,7 +217,7 @@ function getTestIdForValidation() {
         const defaultTestId = testIdQueries.getDefaultTestId();
         return defaultTestId.fid;
     } catch (error) {
-        sendError(null, null, error, 'getTestIdForValidation', false);
+        handleError(null, null, error, 'getTestIdForValidation', false);
         // Return hard-coded default as last resort
         return 40393986;
     }

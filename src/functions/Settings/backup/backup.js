@@ -8,8 +8,8 @@ const {
 	SeparatorBuilder,
 	SeparatorSpacingSize
 } = require('discord.js');
-const { getAdminLang, assertUserMatches, sendError } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { createBackupCreateButton } = require('./backupCreate');
 const { createBackupViewButton } = require('./backupView');
 const { createBackupRestoreButton } = require('./backupRestore');
@@ -28,7 +28,7 @@ function createBackupButton(userId, lang = {}) {
 		.setCustomId(`backup_${userId}`)
 		.setLabel(lang.settings.mainPage.buttons.backup)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1037'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1037'));
 }
 
 /**
@@ -36,7 +36,7 @@ function createBackupButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleBackupButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[1];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -57,7 +57,7 @@ async function handleBackupButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleBackupButton');
+		await handleError(interaction, lang, error, 'handleBackupButton');
 	}
 }
 

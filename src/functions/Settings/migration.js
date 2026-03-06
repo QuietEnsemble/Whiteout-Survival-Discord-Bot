@@ -20,10 +20,11 @@ const AdmZip = require('adm-zip');
 const Seven = require('node-7z');
 const { acquire7z } = require('../utility/ensure7zip');
 const Database = require('better-sqlite3');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 const {
 	adminQueries,
+	userQueries,
 	allianceQueries,
 	playerQueries,
 	idChannelQueries,
@@ -43,7 +44,7 @@ function createDBMigrationButton(userId, lang = {}) {
 		.setCustomId(`db_migration_button_${userId}`)
 		.setLabel(lang.settings.mainPage.buttons.merge)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1035'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1035'));
 }
 
 /**
@@ -51,7 +52,7 @@ function createDBMigrationButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleDBMigrationButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -95,7 +96,7 @@ async function handleDBMigrationButton(interaction) {
 		modal.addLabelComponents(fileLabel, passwordLabel);
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleDBMigrationButton');
+		await handleError(interaction, lang, error, 'handleDBMigrationButton');
 	}
 }
 
@@ -104,7 +105,7 @@ async function handleDBMigrationButton(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction
  */
 async function handleDBMigrationModal(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -220,13 +221,13 @@ async function handleDBMigrationModal(interaction) {
 				.setCustomId(`db_migration_confirm_${interaction.user.id}`)
 				.setLabel(lang.settings.migration.buttons.confirm)
 				.setStyle(ButtonStyle.Danger)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1050'));
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1050'));
 
 			const cancelButton = new ButtonBuilder()
 				.setCustomId(`db_migration_cancel_${interaction.user.id}`)
 				.setLabel(lang.settings.migration.buttons.cancel)
 				.setStyle(ButtonStyle.Secondary)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'));
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'));
 
 			const buttonRow = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
 
@@ -280,12 +281,12 @@ async function handleDBMigrationModal(interaction) {
 			return await interaction.update({ components: errorContent, flags: MessageFlags.IsComponentsV2 });
 		}
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleDBMigrationModal');
+		await handleError(interaction, lang, error, 'handleDBMigrationModal');
 	}
 }
 
 async function handleDBMigrationCancel(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[3];
@@ -309,7 +310,7 @@ async function handleDBMigrationCancel(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleDBMigrationCancel');
+		await handleError(interaction, lang, error, 'handleDBMigrationCancel');
 	}
 }
 
@@ -318,7 +319,7 @@ async function handleDBMigrationCancel(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleDBMigrationConfirm(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const tempId = parts[3];
@@ -641,7 +642,7 @@ async function handleDBMigrationConfirm(interaction) {
 		}
 
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleDBMigrationConfirm');
+		await handleError(interaction, lang, error, 'handleDBMigrationConfirm');
 	}
 }
 
@@ -968,9 +969,10 @@ async function migrateAdmins(settingsPath, allianceIdMap) {
 					'migration',                           // added_by
 					0,                                     // permissions (default)
 					JSON.stringify(alliances),             // alliances (mapped to new IDs)
-					old.is_initial ? 1 : 0,                // is_owner
-					'NA'                                   // language (NA to prompt selection)
+					old.is_initial ? 1 : 0                 // is_owner
 				);
+				// Ensure a users record exists (language will be null — prompts on next /panel)
+				userQueries.upsertUser(userId);
 				count++;
 			} catch (e) {
 				// Admin might already exist, skip

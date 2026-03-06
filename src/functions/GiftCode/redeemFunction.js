@@ -3,7 +3,7 @@ const fs = require('fs').promises;
 const onnx = require('onnxruntime-node');
 const sharp = require('sharp');
 const { EmbedBuilder } = require('discord.js');
-const { sendError } = require('../utility/commonFunctions');
+const { handleError } = require('../utility/commonFunctions');
 const {
     createProcess,
     updateProcessProgress,
@@ -128,7 +128,7 @@ class CaptchaSolver {
             this.session = null;
             this.metadata = null;
             this.initialising = null;
-            await sendError(null, null, error, 'loadCaptchaModel', false);
+            await handleError(null, null, error, 'loadCaptchaModel', false);
             throw error;
         }
     }
@@ -292,7 +292,6 @@ async function authenticatePlayer(fid) {
             // Rate limit detected - wait longer
             if (response.status === 429 || msgLower.includes('too frequent') || msgLower.includes('timeout')) {
                 lastError = `Rate limited (attempt ${attempt}/${API_CONFIG.MAX_RETRIES})`;
-                console.warn(`Player auth rate limited for FID ${fid}, waiting ${API_CONFIG.RATE_LIMIT_DELAY}ms...`);
                 await wait(API_CONFIG.RATE_LIMIT_DELAY);
                 continue;
             }
@@ -328,15 +327,22 @@ async function authenticatePlayer(fid) {
 }
 
 async function fetchCaptchaImage(fid) {
-    const response = await postForm(
-        API_CONFIG.CAPTCHA_URL,
-        {
-            fid: String(fid),
-            time: Date.now().toString(),
-            init: '0'
-        },
-        'Captcha fetch'
-    );
+    let response;
+    try {
+        response = await postForm(
+            API_CONFIG.CAPTCHA_URL,
+            {
+                fid: String(fid),
+                time: Date.now().toString(),
+                init: '0'
+            },
+            'Captcha fetch'
+        );
+    } catch (networkError) {
+        // nativePost already retried, but if it ultimately throws we'll handle it here
+        console.error('Captcha fetch request failed:', networkError.message);
+        return { error: 'NETWORK_ERROR', authError: false };
+    }
 
     // Handle HTTP 429 (rate limit) specifically before checking response structure
     if (response.status === 429) {
@@ -587,7 +593,7 @@ async function createRedeemProcess(redeemData, options = {}) {
         };
 
     } catch (error) {
-        await sendError(null, null, error, 'createRedeemProcess', false);
+        await handleError(null, null, error, 'createRedeemProcess', false);
 
         return {
             success: false,
@@ -648,7 +654,7 @@ async function handleVipTracking(playerId, giftCode, outcome) {
         }
 
     } catch (error) {
-        await sendError(null, null, error, 'handleVipTracking', false);
+        await handleError(null, null, error, 'handleVipTracking', false);
         // Don't throw - VIP tracking shouldn't break the redeem process
     }
 }
@@ -692,7 +698,7 @@ async function processSingleRedeemItem(item) {
             throw new Error(`Unknown operation status: ${item.status}`);
         }
     } catch (error) {
-        await sendError(null, null, error, 'processSingleRedeemItem', false);
+        await handleError(null, null, error, 'processSingleRedeemItem', false);
         return {
             success: false,
             status: 'UNHANDLED_ERROR',
@@ -866,20 +872,8 @@ async function executeRedeemOperation(processId) {
                 // Update gift code to VIP in database
                 try {
                     giftCodeQueries.updateGiftCodeVipStatus(true, item.giftCode);
-
-                    systemLogQueries.addLog(
-                        'vip_detection',
-                        `Gift code dynamically detected as VIP: ${item.giftCode}`,
-                        JSON.stringify({
-                            giftCode: item.giftCode,
-                            detectedAt: vipCodeDetectedAt,
-                            detectedByPlayer: item.id,
-                            status: outcome.status,
-                            processId: processId
-                        })
-                    );
                 } catch (updateError) {
-                    await sendError(null, null, updateError, 'updateGiftCodeVipStatus', false);
+                    await handleError(null, null, updateError, 'updateGiftCodeVipStatus', false);
                 }
 
                 // Filter remaining pending players to VIP-eligible only
@@ -912,7 +906,7 @@ async function executeRedeemOperation(processId) {
                                 nonVipEligiblePlayers.push(fid);
                             }
                         } catch (error) {
-                            await sendError(null, null, error, 'checkVipEligibility', false);
+                            await handleError(null, null, error, 'checkVipEligibility', false);
                         }
                     }
 
@@ -1019,20 +1013,8 @@ async function executeRedeemOperation(processId) {
                 if (outcome.status === 'USED' || outcome.status === 'TIME ERROR' || outcome.status === 'CDK NOT FOUND') {
                     try {
                         giftCodeQueries.updateGiftCodeStatus('invalid', item.giftCode);
-
-                        systemLogQueries.addLog(
-                            'code_invalidated',
-                            `Gift code became invalid during redemption: ${item.giftCode}`,
-                            JSON.stringify({
-                                giftCode: item.giftCode,
-                                reason: outcome.status,
-                                processId: processId,
-                                processedPlayers: results.length,
-                                remainingPlayers: current.pending.length
-                            })
-                        );
                     } catch (updateError) {
-                        await sendError(null, null, updateError, 'updateGiftCodeVipStatus', false);
+                        await handleError(null, null, updateError, 'updateGiftCodeVipStatus', false);
                     }
                 }
 
@@ -1138,17 +1120,6 @@ async function executeRedeemOperation(processId) {
             error: error.message
         });
 
-        systemLogQueries.addLog(
-            'error',
-            `Error executing redeem operation for process ${processId}`,
-            JSON.stringify({
-                processId,
-                error: error.message,
-                stack: error.stack,
-                function: 'executeRedeemOperation'
-            })
-        );
-
         // Memory cleanup on error
         captchaSolver.unload();
         if (global.gc) {
@@ -1204,7 +1175,7 @@ async function validateGiftCode(giftCode) {
         };
 
     } catch (error) {
-        await sendError(null, null, error, 'validateGiftCode', false);
+        await handleError(null, null, error, 'validateGiftCode', false);
         return {
             success: false,
             message: `Validation error: ${error.message}`,
@@ -1264,7 +1235,7 @@ async function redeemGiftCodeForPlayer(playerId, giftCode) {
         return result;
 
     } catch (error) {
-        await sendError(null, null, error, 'redeemGiftCodeForPlayer', false);
+        await handleError(null, null, error, 'redeemGiftCodeForPlayer', false);
         return {
             success: false,
             message: `Redeem error: ${error.message}`
@@ -1509,14 +1480,8 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
     authInfo = null;
     lastResult = null;
 
-    const totalTime = Date.now() - startTime;
     const finalResult = lastResult || createErrorResult('MAX_ATTEMPTS_EXCEEDED', 'Maximum captcha attempts exceeded', false);
 
-    /*
-    if (totalTime > 2000) {
-        console.log(`Failed player ${fid}: ${totalTime}ms total | Auth: ${timings.auth}ms | Captcha Fetch: ${timings.captchaFetch}ms | Solve: ${timings.captchaSolve}ms | API Call: ${timings.apiCall}ms | Delays: ${timings.delays}ms | Retries: ${timings.retries}`);
-    }
-    */
 
     // Force early captcha model unload on repeated failures
     if (attempt >= API_CONFIG.MAX_CAPTCHA_ATTEMPTS || authRetryCount > MAX_AUTH_RETRIES) {
@@ -1730,7 +1695,7 @@ async function updateRedeemProgressEmbed(processId, embedState, stats, context, 
         embedState.lastState = context.state;
 
     } catch (error) {
-        await sendError(null, null, error, 'updateRedeemProgressEmbed', false);
+        await handleError(null, null, error, 'updateRedeemProgressEmbed', false);
         embedState.disabled = true;
     }
 
@@ -1770,7 +1735,6 @@ function buildRedeemProgressEmbed(stats, context) {
             { name: 'Poor/Weak', value: String(stats.restricted || 0), inline: true },
             { name: 'Failed', value: String(stats.failed), inline: true }
         )
-        .setFooter({ text: `Process ID: ${context?.processId || 'unknown'}` })
         .setTimestamp(new Date());
 }
 

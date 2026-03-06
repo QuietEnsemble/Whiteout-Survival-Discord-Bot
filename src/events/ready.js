@@ -12,7 +12,7 @@ const { processQueries } = require('../functions/utility/database');
 
 module.exports = {
     name: Events.ClientReady,
-    once: true,
+    once: false,
     async execute(client) {
         // Register slash commands with Discord
         try {
@@ -70,8 +70,7 @@ module.exports = {
             // Schedule cleanup every 24 hours
             client.processCleanupInterval = setInterval(() => {
                 try {
-                    const result = processQueries.cleanupCompletedFailedProcesses();
-                    console.log(`Cleaned up ${result.changes} completed/failed processes`);
+                    processQueries.cleanupCompletedFailedProcesses();
                 } catch (error) {
                     console.error('Error during scheduled process cleanup:', error);
                 }

@@ -4,26 +4,19 @@ const {
     ActionRowBuilder,
     StringSelectMenuBuilder,
     StringSelectMenuOptionBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
     ContainerBuilder,
     MessageFlags,
     TextDisplayBuilder,
     SeparatorBuilder,
     SeparatorSpacingSize,
-    LabelBuilder,
-    SectionBuilder,
-    ThumbnailBuilder,
     EmbedBuilder
 } = require('discord.js');
 const { adminQueries, adminLogQueries, systemLogQueries } = require('../../utility/database');
 const { formatLogs } = require('../../utility/AdminLogs');
-const languages = require('../../../i18n');
 const { PERMISSIONS, getPermissionDescriptions } = require('./permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 
 /**
@@ -35,9 +28,9 @@ const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 function createViewAdminButton(userId, lang = {}) {
     return new ButtonBuilder()
         .setCustomId(`view_admin_${userId}`)
-        .setLabel(lang.settings.adminManagement.buttons.viewAdmin)
+        .setLabel(lang.settings.adminManagement.mainPage.buttons.viewAdmin)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1049'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1049'));
 }
 
 /**
@@ -46,7 +39,7 @@ function createViewAdminButton(userId, lang = {}) {
  */
 async function handleViewAdminButton(interaction) {
     // Get user's language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // view_admin_userId
@@ -60,7 +53,7 @@ async function handleViewAdminButton(interaction) {
 
         if (allAdmins.length === 0) {
             return await interaction.reply({
-                content: lang.settings.viewAdmins.error.noAdmins,
+                content: lang.settings.adminManagement.viewAdmins.error.noAdmins,
                 ephemeral: true
             });
         }
@@ -69,7 +62,7 @@ async function handleViewAdminButton(interaction) {
         await showViewAdminPage(interaction, allAdmins, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewAdminButton');
+        await handleError(interaction, lang, error, 'handleViewAdminButton');
     }
 }
 
@@ -91,32 +84,48 @@ async function showViewAdminPage(interaction, allAdmins, page = 0, lang = {}, se
     // Create admin select menu
     const adminSelect = new StringSelectMenuBuilder()
         .setCustomId(`select_admin_view_${interaction.user.id}_${page}`)
-        .setPlaceholder(lang.settings.viewAdmins.selectMenu.placeholder)
+        .setPlaceholder(lang.settings.adminManagement.viewAdmins.selectMenu.placeholder)
         .setMinValues(1)
         .setMaxValues(1);
 
     // Add admin options
     for (const admin of pageAdmins) {
-        try {
-            // Try to fetch user to get their tag
-            const user = await interaction.client.users.fetch(admin.user_id);
-            const status = admin.is_owner ? getComponentEmoji(getEmojiMapForAdmin(admin.user_id), '1023') : getComponentEmoji(getEmojiMapForAdmin(admin.user_id), '1026');
+        // Prefer cached tag to avoid Discord API calls
+        const cached = adminUsernameCache.get(admin.user_id);
+        const statusEmoji = admin.is_owner ? getComponentEmoji(getEmojiMapForUser(admin.user_id), '1023') : getComponentEmoji(getEmojiMapForUser(admin.user_id), '1026');
 
+        if (cached.isCached && !cached.fetchFailed) {
+            adminSelect.addOptions(
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(cached.tag)
+                    .setValue(admin.user_id)
+                    .setEmoji(statusEmoji)
+                    .setDefault(selectedAdminId === admin.user_id)
+            );
+            continue;
+        }
+
+        // Not cached or previous fetch failed - try to fetch from Discord but fall back to cache/placeholder
+        try {
+            const user = await interaction.client.users.fetch(admin.user_id);
+            // update cache asynchronously (don't await)
+            adminUsernameCache.add(admin.user_id).catch(() => {});
             adminSelect.addOptions(
                 new StringSelectMenuOptionBuilder()
                     .setLabel(user.tag)
                     .setValue(admin.user_id)
-                    .setEmoji(status)
+                    .setEmoji(statusEmoji)
                     .setDefault(selectedAdminId === admin.user_id)
             );
         } catch (fetchError) {
-            await sendError(interaction, lang, fetchError, 'showViewAdminPage', false);
-
+            // Log error but continue with placeholder from cache
+            await handleError(interaction, lang, fetchError, 'showViewAdminPage', false);
+            const fallbackTag = adminUsernameCache.getTag(admin.user_id) || `(${admin.user_id})`;
             adminSelect.addOptions(
                 new StringSelectMenuOptionBuilder()
-                    .setLabel(`(${admin.user_id})`)
+                    .setLabel(fallbackTag)
                     .setValue(admin.user_id)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(admin.user_id), '1050'))
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(admin.user_id), '1050'))
                     .setDefault(selectedAdminId === admin.user_id)
             );
         }
@@ -150,9 +159,9 @@ async function showViewAdminPage(interaction, allAdmins, page = 0, lang = {}, se
             actionButtonRow.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`view_full_logs_${interaction.user.id}_${selectedAdminId}_0`)
-                    .setLabel(lang.settings.viewAdmins.buttons.viewLogs)
+                    .setLabel(lang.settings.adminManagement.viewAdmins.buttons.viewLogs)
                     .setStyle(ButtonStyle.Secondary)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(selectedAdminId), '1021'))
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(selectedAdminId), '1021'))
             );
         }
     }
@@ -167,8 +176,8 @@ async function showViewAdminPage(interaction, allAdmins, page = 0, lang = {}, se
         .setAccentColor(0x2ecc71)
         .addTextDisplayComponents(
             new TextDisplayBuilder().setContent(
-                `${lang.settings.viewAdmins.content.title.base}\n` +
-                `${lang.settings.viewAdmins.content.description}`
+                `${lang.settings.adminManagement.viewAdmins.content.title.base}\n` +
+                `${lang.settings.adminManagement.viewAdmins.content.description}`
             )
         );
 
@@ -247,10 +256,10 @@ async function getSelectedAdminDetails(adminData, client, lang) {
 
         const permissionsList = userPermissions.length > 0 ?
             userPermissions.join('\n') :
-            lang.settings.viewAdmins.content.noPermissions;
+            lang.settings.adminManagement.viewAdmins.content.noPermissions;
 
         // Get recent admin logs (last 5 actions)
-        let recentActivity = lang.settings.viewAdmins.content.noRecentActivity;
+        let recentActivity = lang.settings.adminManagement.viewAdmins.content.noRecentActivity;
 
         try {
             const formattedLogs = formatLogs(lang, adminData.user_id, { limit: 5 });
@@ -263,9 +272,9 @@ async function getSelectedAdminDetails(adminData, client, lang) {
             recentActivity = lang.common.error;
         }
 
-        return `${lang.settings.viewAdmins.content.adminInfoField.name}\n${lang.settings.viewAdmins.content.adminInfoField.value.replace('{username}', user.tag).replace('{userId}', adminData.user_id)}\n` +
-            `${lang.settings.viewAdmins.content.permissionsField.name}\n${lang.settings.viewAdmins.content.permissionsField.value.replace('{permissionsList}', permissionsList)}\n` +
-            `${lang.settings.viewAdmins.content.recentActivityField.name}\n${lang.settings.viewAdmins.content.recentActivityField.value.replace('{activityList}', recentActivity)}`;
+        return `${lang.settings.adminManagement.viewAdmins.content.adminInfoField.name}\n${lang.settings.adminManagement.viewAdmins.content.adminInfoField.value.replace('{username}', user.tag).replace('{userId}', adminData.user_id)}\n` +
+            `${lang.settings.adminManagement.viewAdmins.content.permissionsField.name}\n${lang.settings.adminManagement.viewAdmins.content.permissionsField.value.replace('{permissionsList}', permissionsList)}\n` +
+            `${lang.settings.adminManagement.viewAdmins.content.recentActivityField.name}\n${lang.settings.adminManagement.viewAdmins.content.recentActivityField.value.replace('{activityList}', recentActivity)}`;
 
     } catch (error) {
         return '';
@@ -278,7 +287,7 @@ async function getSelectedAdminDetails(adminData, client, lang) {
  */
 async function handleViewAdminSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -303,7 +312,7 @@ async function handleViewAdminSelection(interaction) {
         const selectedAdminData = adminQueries.getAdmin(selectedAdminId);
         if (!selectedAdminData) {
             return await interaction.reply({
-                content: lang.settings.viewAdmins.error.userNotAdmin,
+                content: lang.settings.adminManagement.viewAdmins.error.userNotAdmin,
                 ephemeral: true
             });
         }
@@ -313,7 +322,7 @@ async function handleViewAdminSelection(interaction) {
         await showViewAdminPage(interaction, allAdmins, currentPage, lang, selectedAdminId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewAdminSelection');
+        await handleError(interaction, lang, error, 'handleViewAdminSelection');
     }
 }
 
@@ -323,7 +332,7 @@ async function handleViewAdminSelection(interaction) {
  */
 async function handleViewFullLogsButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and admin ID from custom ID: view_full_logs_userId_adminId_page
         const customIdParts = interaction.customId.split('_');
@@ -347,7 +356,7 @@ async function handleViewFullLogsButton(interaction) {
         await showFullLogsPage(interaction, adminId, page, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewFullLogsButton');
+        await handleError(interaction, lang, error, 'handleViewFullLogsButton');
     }
 }
 
@@ -372,7 +381,7 @@ async function showFullLogsPage(interaction, adminId, page = 0, lang = {}, isUpd
         const adminData = adminQueries.getAdmin(adminId);
         if (!adminData) {
             return await interaction.reply({
-                content: lang.settings.viewAdmins.error.userNotAdmin,
+                content: lang.settings.adminManagement.viewAdmins.error.userNotAdmin,
                 ephemeral: true
             });
         }
@@ -382,14 +391,14 @@ async function showFullLogsPage(interaction, adminId, page = 0, lang = {}, isUpd
         try {
             user = await interaction.client.users.fetch(adminId);
         } catch (fetchError) {
-            await sendError(interaction, lang, fetchError, 'showFullLogsPage', false);
+            await handleError(interaction, lang, fetchError, 'showFullLogsPage', false);
 
             user = { tag: `Unknown User (${adminId})` };
         }
 
         // Create logs embed
         const logsEmbed = new EmbedBuilder()
-            .setTitle(lang.settings.viewAdmins.content.title.fullLogs.replace('{user}', user.tag))
+            .setTitle(lang.settings.adminManagement.viewAdmins.content.title.fullLogs.replace('{user}', user.tag))
             .setColor(0x3498db)
             .setThumbnail(user.displayAvatarURL ? user.displayAvatarURL() : null)
             .setFooter({
@@ -407,13 +416,13 @@ async function showFullLogsPage(interaction, adminId, page = 0, lang = {}, isUpd
             }).join('\n');
 
             logsEmbed.addFields([{
-                name: lang.settings.viewAdmins.content.actionLogsField.name,
-                value: lang.settings.viewAdmins.content.actionLogsField.value.replace('{logsList}', logEntries.length > 1024 ? logEntries.substring(0, 1021) + '...' : logEntries)
+                name: lang.settings.adminManagement.viewAdmins.content.actionLogsField.name,
+                value: lang.settings.adminManagement.viewAdmins.content.actionLogsField.value.replace('{logsList}', logEntries.length > 1024 ? logEntries.substring(0, 1021) + '...' : logEntries)
             }]);
         } else {
             logsEmbed.addFields([{
-                name: lang.settings.viewAdmins.content.actionLogsField.name,
-                value: lang.settings.viewAdmins.content.noLogsFound
+                name: lang.settings.adminManagement.viewAdmins.content.actionLogsField.name,
+                value: lang.settings.adminManagement.viewAdmins.content.noLogsFound
             }]);
         }
 
@@ -447,7 +456,7 @@ async function showFullLogsPage(interaction, adminId, page = 0, lang = {}, isUpd
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'showFullLogsPage');
+        await handleError(interaction, lang, error, 'showFullLogsPage');
     }
 }
 
@@ -457,7 +466,7 @@ async function showFullLogsPage(interaction, adminId, page = 0, lang = {}, isUpd
  */
 async function handleViewAdminPagination(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Parse custom ID
         const parsed = parsePaginationCustomId(interaction.customId, 1);
@@ -486,7 +495,7 @@ async function handleViewAdminPagination(interaction) {
         await showViewAdminPage(interaction, allAdmins, newPage, lang, selectedAdminId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewAdminPagination');
+        await handleError(interaction, lang, error, 'handleViewAdminPagination');
     }
 }
 
@@ -496,7 +505,7 @@ async function handleViewAdminPagination(interaction) {
  */
 async function handleViewFullLogsPagination(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Parse custom ID
         const parsed = parsePaginationCustomId(interaction.customId, 1);
@@ -524,7 +533,7 @@ async function handleViewFullLogsPagination(interaction) {
         await showFullLogsPage(interaction, adminId, newPage, lang, true);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewFullLogsPagination');
+        await handleError(interaction, lang, error, 'handleViewFullLogsPagination');
     }
 }
 

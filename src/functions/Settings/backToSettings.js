@@ -1,6 +1,6 @@
 const { ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
-const { getAdminLang, assertUserMatches, sendError } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 /**
  * Creates a back to settings button
  * @param {string} userId - ID of the user who can interact with this button
@@ -12,7 +12,7 @@ function createBackToSettingsButton(userId, lang = {}) {
         .setCustomId(`back_to_settings_${userId}`)
         .setLabel(lang.settings.mainPage.buttons.backToSettings)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1002'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1002'));
 }
 
 /**
@@ -20,7 +20,7 @@ function createBackToSettingsButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleBackToSettingsButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // back_to_settings_userId
@@ -46,7 +46,7 @@ async function handleBackToSettingsButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleBackToSettingsButton');
+        await handleError(interaction, lang, error, 'handleBackToSettingsButton');
     }
 }
 

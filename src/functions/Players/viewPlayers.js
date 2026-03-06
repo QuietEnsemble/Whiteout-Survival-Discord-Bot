@@ -12,8 +12,8 @@ const { allianceQueries, playerQueries } = require('../utility/database');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { getFurnaceReadable } = require('./furnaceReadable');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 const PLAYERS_PER_PAGE = 10;
 
@@ -28,7 +28,7 @@ function createViewPlayersButton(userId, lang = {}) {
         .setCustomId(`view_players_${userId}`)
         .setLabel(lang.players.mainPage.buttons.viewPlayers)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1049'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1049'));
 }
 
 
@@ -89,7 +89,7 @@ function createAllianceSelectionContainer(interaction, alliances, lang, page = 0
                 description: lang.players.viewPlayers.selectMenu.allianceSelect.description
                     .replace('{alliancePriority}', alliance.priority)
                     .replace('{playerCount}', playerCount),
-                emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001')
+                emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001')
             };
         }
     });
@@ -171,7 +171,7 @@ function createPlayerListContainer(interaction, players, lang, alliance, page = 
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleViewPlayersButton(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
     try {
         const expectedUserId = interaction.customId.split('_')[2]; // view_players_userId
 
@@ -214,7 +214,7 @@ async function handleViewPlayersButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewPlayersButton');
+        await handleError(interaction, lang, error, 'handleViewPlayersButton');
     }
 }
 
@@ -223,7 +223,7 @@ async function handleViewPlayersButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleViewPlayersAlliancePagination(interaction) {
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
     try {
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 
@@ -244,7 +244,7 @@ async function handleViewPlayersAlliancePagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewPlayersAlliancePagination');
+        await handleError(interaction, lang, error, 'handleViewPlayersAlliancePagination');
     }
 }
 
@@ -253,7 +253,7 @@ async function handleViewPlayersAlliancePagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleViewPlayersAllianceSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // customId: view_players_alliance_select_{userId}_{page}
         const customIdParts = interaction.customId.split('_');
@@ -285,7 +285,7 @@ async function handleViewPlayersAllianceSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewPlayersAllianceSelection');
+        await handleError(interaction, lang, error, 'handleViewPlayersAllianceSelection');
     }
 }
 
@@ -294,7 +294,7 @@ async function handleViewPlayersAllianceSelection(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleViewPlayersPlayerPagination(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // contextData[0] = allianceId
         const { userId: expectedUserId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 1);
@@ -312,7 +312,7 @@ async function handleViewPlayersPlayerPagination(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewPlayersPlayerPagination');
+        await handleError(interaction, lang, error, 'handleViewPlayersPlayerPagination');
     }
 }
 

@@ -10,11 +10,11 @@ const {
 	StringSelectMenuOptionBuilder,
 	TextDisplayBuilder
 } = require('discord.js');
-const { customEmojiQueries, adminQueries } = require('../../utility/database');
+const { customEmojiQueries, userQueries } = require('../../utility/database');
 const { PERMISSIONS } = require('../admin/permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const ITEMS_PER_PAGE = 24;
 
 /**
@@ -28,7 +28,7 @@ function createEmojiActivateButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_activate_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.activatePack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1043'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1043'));
 }
 
 /**
@@ -36,12 +36,12 @@ function createEmojiActivateButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiActivateButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, userData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-		if (!adminData) {
+		if (!userData) {
 			return await interaction.reply({
 				content: lang.common.noPermission,
 				ephemeral: true
@@ -50,7 +50,7 @@ async function handleEmojiActivateButton(interaction) {
 
 		await showEmojiSetSelection(interaction, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiActivateButton');
+		await handleError(interaction, lang, error, 'handleEmojiActivateButton');
 	}
 }
 
@@ -99,7 +99,7 @@ async function showEmojiSetSelection(interaction, page, lang) {
 				.setLabel(set.name)
 				.setValue(String(set.id))
 				.setDescription(description)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), set.active ? '1004' : '1039'))
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), set.active ? '1004' : '1039'))
 		);
 	});
 
@@ -143,13 +143,13 @@ async function showEmojiSetSelection(interaction, page, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiActivatePagination(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 		if (!(await assertUserMatches(interaction, userId, lang))) return;
 		await showEmojiSetSelection(interaction, newPage, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiActivatePagination');
+		await handleError(interaction, lang, error, 'handleEmojiActivatePagination');
 	}
 }
 
@@ -158,20 +158,13 @@ async function handleEmojiActivatePagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleEmojiActivateSelection(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
 		const hasFullAccess = await hasPermission(adminData, PERMISSIONS.FULL_ACCESS);
-
-		if (!adminData) {
-			return await interaction.reply({
-				content: lang.common.noPermission,
-				ephemeral: true
-			});
-		}
 
 		const setId = parseInt(interaction.values[0], 10);
 		const set = customEmojiQueries.getCustomEmojiSetById(setId);
@@ -187,13 +180,13 @@ async function handleEmojiActivateSelection(interaction) {
 			.setLabel(lang.settings.theme.activatePack.buttons.global)
 			.setStyle(ButtonStyle.Secondary)
 			.setDisabled(!hasFullAccess)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1027'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1027'));
 
 		const personalButton = new ButtonBuilder()
 			.setCustomId(`emoji_activate_personal_${setId}_${interaction.user.id}`)
 			.setLabel(lang.settings.theme.activatePack.buttons.personal)
 			.setStyle(ButtonStyle.Secondary)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1026'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1026'));
 
 		const row = new ActionRowBuilder().addComponents(globalButton, personalButton);
 
@@ -216,7 +209,7 @@ async function handleEmojiActivateSelection(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiActivateSelection');
+		await handleError(interaction, lang, error, 'handleEmojiActivateSelection');
 	}
 }
 
@@ -225,7 +218,7 @@ async function handleEmojiActivateSelection(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiActivateChoice(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const scope = parts[2];
@@ -233,13 +226,6 @@ async function handleEmojiActivateChoice(interaction) {
 		const expectedUserId = parts[4];
 
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
-
-		if (!adminData) {
-			return await interaction.reply({
-				content: lang.common.noPermission,
-				ephemeral: true
-			});
-		}
 
 		const set = customEmojiQueries.getCustomEmojiSetById(setId);
 		if (!set) {
@@ -250,7 +236,7 @@ async function handleEmojiActivateChoice(interaction) {
 		}
 
 		if (scope === 'global') {
-			const hasFullAccess = await hasPermission(adminData, PERMISSIONS.FULL_ACCESS);
+			const hasFullAccess = adminData && await hasPermission(adminData, PERMISSIONS.FULL_ACCESS);
 			if (!hasFullAccess) {
 				return await interaction.reply({
 					content: lang.common.noPermission,
@@ -261,11 +247,11 @@ async function handleEmojiActivateChoice(interaction) {
 			customEmojiQueries.clearActiveCustomEmojiSet();
 			customEmojiQueries.setActiveCustomEmojiSet(setId);
 		} else if (scope === 'personal') {
-			adminQueries.updateAdminCustomEmoji(setId, interaction.user.id);
+			userQueries.updateCustomEmoji(setId, interaction.user.id);
 		}
 
 		// Refresh lang object to load new emoji pack's IDs
-		const { lang: freshLang } = getAdminLang(interaction.user.id);
+		const { lang: freshLang } = getUserInfo(interaction.user.id);
 
 		const successText = scope === 'global'
 			? (freshLang.settings.theme.activatePack.content.description.globalActivated).replace('{packName}', `**${set.name}**`)
@@ -288,7 +274,7 @@ async function handleEmojiActivateChoice(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiActivateChoice');
+		await handleError(interaction, lang, error, 'handleEmojiActivateChoice');
 	}
 }
 

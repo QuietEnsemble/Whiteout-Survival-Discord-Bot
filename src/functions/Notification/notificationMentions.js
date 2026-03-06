@@ -6,9 +6,11 @@
 const { ButtonBuilder, ButtonStyle, EmbedBuilder, ActionRowBuilder, UserSelectMenuBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { notificationQueries } = require('../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
 const { extractMentionTags, convertTagsToMentions, parseMentions } = require('./notificationUtils');
-const { getEmojiMapForAdmin, getComponentEmoji, replaceEmojiPlaceholders } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji, replaceEmojiPlaceholders } = require('../utility/emojis');
+const { PERMISSIONS } = require('../Settings/admin/permissions');
+const { checkFeatureAccess } = require('../utility/checkAccess');
 
 
 // Module reference for showEmbedEditor (set by createNotification.js)
@@ -25,7 +27,7 @@ function setModuleReferences(showEmbedEditor) {
  * Handle mention selection (user/role select menus)
  */
 async function handleMentionSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         // notification_mention_select_{userId}_{notificationId}_{component}|{tag}|{type}|{editorMessageId}
@@ -52,7 +54,7 @@ async function handleMentionSelection(interaction) {
         await saveMention(interaction, notificationId, component, tag, mentionType, selectedId, lang, editorMessageId, showEmbedEditorRef);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMentionSelection');
+        await handleError(interaction, lang, error, 'handleMentionSelection');
     }
 }
 
@@ -60,7 +62,7 @@ async function handleMentionSelection(interaction) {
  * Handle tag selection from dropdown
  */
 async function handleTagSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         // notification_tag_select_{notificationId}_{userId}_{component}_{editorMessageId}_{page}
@@ -89,7 +91,7 @@ async function handleTagSelection(interaction) {
         await showMentionTypeSelection(interaction, notificationId, component, selectedTag, lang, editorMessageId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTagSelection');
+        await handleError(interaction, lang, error, 'handleTagSelection');
     }
 }
 
@@ -97,7 +99,7 @@ async function handleTagSelection(interaction) {
  * Handle tag pagination buttons
  */
 async function handleTagPagination(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const { userId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 3);
@@ -110,7 +112,7 @@ async function handleTagPagination(interaction) {
         await showTagSelectionMenu(interaction, notificationId, component, lang, editorMessageId, newPage, true);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTagPagination');
+        await handleError(interaction, lang, error, 'handleTagPagination');
     }
 }
 
@@ -118,7 +120,7 @@ async function handleTagPagination(interaction) {
  * Handle tag save button
  */
 async function handleTagSave(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -138,12 +140,12 @@ async function handleTagSave(interaction) {
             try {
                 await interaction.message.delete();
             } catch (err) {
-                await sendError(interaction, lang, err, 'handleTagSave - delete config message');
+                await handleError(interaction, lang, err, 'handleTagSave - delete config message');
             }
         }, 3000);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTagSave');
+        await handleError(interaction, lang, error, 'handleTagSave');
     }
 }
 
@@ -151,7 +153,7 @@ async function handleTagSave(interaction) {
  * Handle mention type button (User/Role/Everyone/Here)
  */
 async function handleMentionTypeButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         // notification_mention_{type}_{userId}_{notificationId}_{component}|{tag}|{editorMessageId}
@@ -174,7 +176,7 @@ async function handleMentionTypeButton(interaction) {
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMentionTypeButton');
+        await handleError(interaction, lang, error, 'handleMentionTypeButton');
     }
 }
 
@@ -199,7 +201,7 @@ async function showTagSelectionMenu(interaction, notificationId, component, lang
                 tags = extractMentionTags(fields[fieldIndex].value);
             }
         } catch (error) {
-            await sendError(interaction, lang, error, 'showTagSelectionMenu - extract field tags');
+            await handleError(interaction, lang, error, 'showTagSelectionMenu - extract field tags');
             tags = [];
         }
     }
@@ -213,7 +215,7 @@ async function showTagSelectionMenu(interaction, notificationId, component, lang
     }
 
     // Build tag list with status 
-    const emojiMap = getEmojiMapForAdmin(interaction.user.id);
+    const emojiMap = getEmojiMapForUser(interaction.user.id);
     const hasGuild = !!(interaction && interaction.guild);
     const tagOptions = await Promise.all(tags.map(async (tag) => {
         const configured = componentMentions[tag];
@@ -354,13 +356,13 @@ async function showMentionTypeSelection(interaction, notificationId, component, 
     const userButton = new ButtonBuilder()
         .setCustomId(`notification_mention_user_${interaction.user.id}_${notificationId}_${component}|${tag}|${editorMessageId || 'none'}`)
         .setLabel(lang.notification.notificationEditor.buttons.userMentions)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1026'))
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1026'))
         .setStyle(ButtonStyle.Secondary);
 
     const roleButton = new ButtonBuilder()
         .setCustomId(`notification_mention_role_${interaction.user.id}_${notificationId}_${component}|${tag}|${editorMessageId || 'none'}`)
         .setLabel(lang.notification.notificationEditor.buttons.roleMentions)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1027'))
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1027'))
         .setStyle(ButtonStyle.Secondary);
 
     const everyoneButton = new ButtonBuilder()
@@ -493,6 +495,18 @@ async function saveMention(interaction, notificationId, component, tag, mentionT
         });
     }
 
+    // Re-check permissions at write time (components don't expire)
+    const { adminData } = getUserInfo(interaction.user.id);
+    const hasServerPermission = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+    const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+    if (notification.type === 'server' && !hasServerPermission) {
+        return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+    }
+    if (notification.type === 'private' && !hasPrivateFeature) {
+        return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+    }
+
     // Parse existing mentions
     const mentions = parseMentions(notification.mention);
 
@@ -571,7 +585,7 @@ async function saveMention(interaction, notificationId, component, tag, mentionT
                 }
             }
         } catch (editorUpdateError) {
-            await sendError(interaction, lang, editorUpdateError, 'saveMention - update editor message');
+            await handleError(interaction, lang, editorUpdateError, 'saveMention - update editor message');
         }
 
         // Show formatted mention in success message
@@ -612,12 +626,12 @@ async function saveMention(interaction, notificationId, component, tag, mentionT
                 // Reuse showTagSelectionMenu to build the menu
                 await showTagSelectionMenu(fakeInteraction, notificationId, component, lang, editorMessageId, 0, true);
             } catch (err) {
-                await sendError(interaction, lang, err, 'saveMention - showTagSelectionMenu');
+                await handleError(interaction, lang, err, 'saveMention - showTagSelectionMenu');
             }
         }, 1500);
 
     } catch (dbError) {
-        await sendError(interaction, lang, dbError, 'saveMention');
+        await handleError(interaction, lang, dbError, 'saveMention');
     }
 }
 

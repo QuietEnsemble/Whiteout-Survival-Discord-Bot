@@ -2,25 +2,19 @@ const {
     ButtonBuilder,
     ButtonStyle,
     ActionRowBuilder,
-    StringSelectMenuBuilder,
-    StringSelectMenuOptionBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
     ContainerBuilder,
     MessageFlags,
     TextDisplayBuilder,
     SeparatorBuilder,
     SeparatorSpacingSize,
-    LabelBuilder
 } = require('discord.js');
 const { createAddAdminButton } = require('./addAdmin');
 const { createRemoveAdminButton } = require('./removeAdmin');
 const { createEditAdminButton } = require('./assignPermission');
 const { createViewAdminButton } = require('./viewAdmin');
 const { createBackToSettingsButton } = require('../backToSettings');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 
 
 /**
@@ -32,9 +26,9 @@ const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis
 function createManageAdminsButton(userId, lang = {}) {
     return new ButtonBuilder()
         .setCustomId(`manage_admins_${userId}`)
-        .setLabel(lang.settings.adminManagement.buttons.manageAdmins)
+        .setLabel(lang.settings.mainPage.buttons.manageAdmins)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1027'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1027'));
 }
 
 /**
@@ -43,7 +37,7 @@ function createManageAdminsButton(userId, lang = {}) {
  */
 async function handleManageAdminsButton(interaction) {
     // Get admin language preference
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2];
@@ -71,20 +65,20 @@ async function handleManageAdminsButton(interaction) {
                 .setAccentColor(0x9b59b6) // Purple color
                 .addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(
-                        `${lang.settings.adminManagement.content.title}\n` +
-                        `${lang.settings.adminManagement.content.description}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.title}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.description}\n` +
 
-                        `${lang.settings.adminManagement.content.addAdminField.name}\n` +
-                        `${lang.settings.adminManagement.content.addAdminField.value}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.addAdminField.name}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.addAdminField.value}\n` +
 
-                        `${lang.settings.adminManagement.content.removeAdminField.name}\n` +
-                        `${lang.settings.adminManagement.content.removeAdminField.value}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.removeAdminField.name}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.removeAdminField.value}\n` +
 
-                        `${lang.settings.adminManagement.content.assignPermissionsField.name}\n` +
-                        `${lang.settings.adminManagement.content.assignPermissionsField.value}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.assignPermissionsField.name}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.assignPermissionsField.value}\n` +
 
-                        `${lang.settings.adminManagement.content.viewAdminsField.name}\n` +
-                        `${lang.settings.adminManagement.content.viewAdminsField.value}`
+                        `${lang.settings.adminManagement.mainPage.content.viewAdminsField.name}\n` +
+                        `${lang.settings.adminManagement.mainPage.content.viewAdminsField.value}`
                     )
                 )
                 .addSeparatorComponents(
@@ -102,7 +96,7 @@ async function handleManageAdminsButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleManageAdminsButton');
+        await handleError(interaction, lang, error, 'handleManageAdminsButton');
     }
 }
 

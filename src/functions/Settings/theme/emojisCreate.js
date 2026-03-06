@@ -9,9 +9,9 @@ const {
 } = require('discord.js');
 const { customEmojiQueries } = require('../../utility/database');
 const { EMOJI_DEFINITIONS } = require('../../utility/emojis');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../../utility/commonFunctions');
 const { showEmojiEditor } = require('./emojisEditor');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { PERMISSIONS } = require('../admin/permissions');
 
 /**
@@ -25,7 +25,7 @@ function createEmojiCreateButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_create_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.createPack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 /**
@@ -33,7 +33,7 @@ function createEmojiCreateButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiCreateButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -65,7 +65,7 @@ async function handleEmojiCreateButton(interaction) {
 		modal.addLabelComponents(nameLabel);
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiCreateButton');
+		await handleError(interaction, lang, error, 'handleEmojiCreateButton');
 	}
 }
 
@@ -74,7 +74,7 @@ async function handleEmojiCreateButton(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction
  */
 async function handleEmojiCreateModal(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -126,7 +126,7 @@ async function handleEmojiCreateModal(interaction) {
 
 		await showEmojiEditor(interaction, setId, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiCreateModal');
+		await handleError(interaction, lang, error, 'handleEmojiCreateModal');
 	}
 }
 

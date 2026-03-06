@@ -3,7 +3,7 @@ const { EmbedBuilder } = require('discord.js');
 const { giftCodeQueries, adminQueries, allianceQueries, playerQueries, systemLogQueries } = require('../utility/database');
 const { createRedeemProcess } = require('./redeemFunction');
 const languages = require('../../i18n');
-const { getAdminLang, sendError } = require('../utility/commonFunctions');
+const { getUserInfo, handleError } = require('../utility/commonFunctions');
 const { GIFT_CODE_API_CONFIG } = require('../utility/apiConfig');
 
 
@@ -139,7 +139,7 @@ class GiftCodeAPI {
                 }
             }
         } catch (error) {
-            await sendError(null, null, error, 'startApiCheck', false);
+            await handleError(null, null, error, 'startApiCheck', false);
         }
     }
 
@@ -192,25 +192,14 @@ class GiftCodeAPI {
                             console.error(`Failed to remove invalid code ${codeData.gift_code} from API:`, removeError);
                         }
 
-                        systemLogQueries.addLog(
-                            '24h_validation',
-                            `Gift code became invalid after 24h check: ${codeData.gift_code}`,
-                            JSON.stringify({
-                                giftCode: codeData.gift_code,
-                                reason: message,
-                                status: status,
-                                lastValidated: codeData.last_validated,
-                                action: 'marked_invalid'
-                            })
-                        );
                     }
                 } catch (error) {
-                    await sendError(null, null, error, 'validateExistingCodes', false);
+                    await handleError(null, null, error, 'validateExistingCodes', false);
                 }
             }
 
         } catch (error) {
-            await sendError(null, null, error, 'validateExistingCodes', false);
+            await handleError(null, null, error, 'validateExistingCodes', false);
         }
     }
 
@@ -323,7 +312,7 @@ class GiftCodeAPI {
                                     await this.sleep(backoffTime);
                                 }
                             } catch (error) {
-                                await sendError(null, null, error, 'deleteInvalidCode', false);
+                                await handleError(null, null, error, 'deleteInvalidCode', false);
                             }
                         }
                     }
@@ -408,7 +397,7 @@ class GiftCodeAPI {
                                     );
                                 }
                             } catch (error) {
-                                await sendError(null, null, error, 'validateNewCode', false);
+                                await handleError(null, null, error, 'validateNewCode', false);
                             }
                         }
 
@@ -437,7 +426,7 @@ class GiftCodeAPI {
                             creationResults.forEach((result, idx) => {
                                 const { code, allianceId, allianceName } = processCreationPromises[idx];
                                 if (result.status === 'rejected') {
-                                    sendError(null, null, result.reason, `autoRedeemProcessCreation_${code}_${allianceId}`, false);
+                                    handleError(null, null, result.reason, `autoRedeemProcessCreation_${code}_${allianceId}`, false);
                                 } else if (result.value === null) {
                                     // Null indicates no eligible players or other early exit; log for visibility
                                     // console.warn(`Auto-redeem process not created for code ${code} in alliance ${allianceName} (${allianceId}) - no eligible players or skipped.`);
@@ -454,7 +443,7 @@ class GiftCodeAPI {
 
                                     // Send notification to each owner admin with ALL codes in one message
                                     for (const admin of ownerAdmins) {
-                                        const { lang } = getAdminLang(admin.user_id);
+                                        const { lang } = getUserInfo(admin.user_id);
 
                                         // Create embeds for all valid codes
                                         const embeds = validCodesForAutoRedeem.map(({ code, date }) => {
@@ -496,7 +485,7 @@ class GiftCodeAPI {
                                                 await user.send({ embeds: embedChunk });
                                             }
                                         } catch (error) {
-                                            await sendError(null, null, error, 'sendAdminNotifications', false);
+                                            await handleError(null, null, error, 'sendAdminNotifications', false);
                                         }
                                     }
                                 }
@@ -553,7 +542,7 @@ class GiftCodeAPI {
                                     giftCodeQueries.updateApiPushed(true, code);
                                 }
                             } catch (error) {
-                                await sendError(null, null, error, 'pushCodeToAPI', false);
+                                await handleError(null, null, error, 'pushCodeToAPI', false);
                                 await this.sleep(this.errorBackoffTime);
                             }
                         }
@@ -565,15 +554,15 @@ class GiftCodeAPI {
                     return true;
 
                 } catch (jsonError) {
-                    await sendError(null, null, jsonError, 'syncWithAPI_jsonError', false);
+                    await handleError(null, null, jsonError, 'syncWithAPI_jsonError', false);
                     return false;
                 }
             } catch (fetchError) {
-                await sendError(null, null, fetchError, 'syncWithAPI_fetchError', false);
+                await handleError(null, null, fetchError, 'syncWithAPI_fetchError', false);
                 return false;
             }
         } catch (error) {
-            await sendError(null, null, error, 'syncWithAPI_unexpectedError', false);
+            await handleError(null, null, error, 'syncWithAPI_unexpectedError', false);
             return false;
         }
     }
@@ -636,7 +625,7 @@ class GiftCodeAPI {
                             return false;
                         }
                     } catch (jsonError) {
-                        await sendError(null, null, jsonError, 'addGiftcode_jsonError', false);
+                        await handleError(null, null, jsonError, 'addGiftcode_jsonError', false);
                         return false;
                     }
                 } else if (response.status === 409) {
@@ -655,11 +644,11 @@ class GiftCodeAPI {
                     return false;
                 }
             } catch (fetchError) {
-                await sendError(null, null, fetchError, 'addGiftcode_fetchError', false);
+                await handleError(null, null, fetchError, 'addGiftcode_fetchError', false);
                 return false;
             }
         } catch (error) {
-            await sendError(null, null, error, 'addGiftcode_unexpectedError', false);
+            await handleError(null, null, error, 'addGiftcode_unexpectedError', false);
             return false;
         }
     }
@@ -718,11 +707,11 @@ class GiftCodeAPI {
                     return false;
                 }
             } catch (fetchError) {
-                await sendError(null, null, fetchError, 'removeGiftcode_fetchError', false);
+                await handleError(null, null, fetchError, 'removeGiftcode_fetchError', false);
                 return false;
             }
         } catch (error) {
-            await sendError(null, null, error, 'removeGiftcode_unexpectedError', false);
+            await handleError(null, null, error, 'removeGiftcode_unexpectedError', false);
             return false;
         }
     }
@@ -759,11 +748,11 @@ class GiftCodeAPI {
                     return false;
                 }
             } catch (fetchError) {
-                await sendError(null, null, fetchError, 'checkGiftcode_fetchError', false);
+                await handleError(null, null, fetchError, 'checkGiftcode_fetchError', false);
                 return false;
             }
         } catch (error) {
-            await sendError(null, null, error, 'checkGiftcode_unexpectedError', false);
+            await handleError(null, null, error, 'checkGiftcode_unexpectedError', false);
             return false;
         }
     }
@@ -816,7 +805,7 @@ class GiftCodeAPI {
             return result;
 
         } catch (error) {
-            await sendError(null, null, error, 'createAutoRedeemProcessForCodeAndAlliance', false);
+            await handleError(null, null, error, 'createAutoRedeemProcessForCodeAndAlliance', false);
             return null;
         }
     }

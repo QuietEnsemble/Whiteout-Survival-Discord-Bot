@@ -16,8 +16,8 @@ const path = require('path');
 const https = require('https');
 const { customEmojiQueries } = require('../../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 
 const ITEMS_PER_PAGE = 24;
 
@@ -32,7 +32,7 @@ function createEmojiShareButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_share_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.sharePack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1018'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1018'));
 }
 
 function downloadEmojiBuffer(url) {
@@ -46,7 +46,7 @@ function downloadEmojiBuffer(url) {
 }
 
 async function handleEmojiExportButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -60,7 +60,7 @@ async function handleEmojiExportButton(interaction) {
 
 		await showEmojiExportSelection(interaction, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiExportButton');
+		await handleError(interaction, lang, error, 'handleEmojiExportButton');
 	}
 }
 
@@ -104,7 +104,7 @@ async function showEmojiExportSelection(interaction, page, lang) {
 				.setLabel(set.name)
 				.setValue(String(set.id))
 				.setDescription(isActive ? lang.settings.theme.exportPack.selectMenu.description.active : lang.settings.theme.exportPack.selectMenu.packSelect.description.inactive)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), isActive ? '1004' : '1039'))
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), isActive ? '1004' : '1039'))
 		);
 	});
 
@@ -145,18 +145,18 @@ async function showEmojiExportSelection(interaction, page, lang) {
 }
 
 async function handleEmojiExportPagination(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 		if (!(await assertUserMatches(interaction, userId, lang))) return;
 		await showEmojiExportSelection(interaction, newPage, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiExportPagination');
+		await handleError(interaction, lang, error, 'handleEmojiExportPagination');
 	}
 }
 
 async function handleEmojiExportSelection(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[3];
@@ -280,7 +280,7 @@ async function handleEmojiExportSelection(interaction) {
 			}
 		}, 5000);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiExportSelection');
+		await handleError(interaction, lang, error, 'handleEmojiExportSelection');
 	}
 }
 

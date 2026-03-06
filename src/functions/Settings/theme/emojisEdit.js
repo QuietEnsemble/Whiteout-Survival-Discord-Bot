@@ -12,9 +12,9 @@ const {
 } = require('discord.js');
 const { customEmojiQueries } = require('../../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
 const { showEmojiEditor } = require('./emojisEditor');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { PERMISSIONS } = require('../admin/permissions');
 const ITEMS_PER_PAGE = 24;
 
@@ -29,7 +29,7 @@ function createEmojiEditButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_edit_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.editPack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1008'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1008'));
 }
 
 /**
@@ -37,7 +37,7 @@ function createEmojiEditButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiEditButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -53,7 +53,7 @@ async function handleEmojiEditButton(interaction) {
 
 		await showEmojiEditSelection(interaction, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiEditButton');
+		await handleError(interaction, lang, error, 'handleEmojiEditButton');
 	}
 }
 
@@ -104,7 +104,7 @@ async function showEmojiEditSelection(interaction, page, lang) {
 				.setLabel(set.name)
 				.setValue(String(set.id))
 				.setDescription(isActive ? lang.settings.theme.editPack.selectMenu.description.active : lang.settings.theme.editPack.selectMenu.packSelect.description.inactive)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), isActive ? '1004' : '1039'))
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), isActive ? '1004' : '1039'))
 		);
 	});
 
@@ -148,7 +148,7 @@ async function showEmojiEditSelection(interaction, page, lang) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiEditPagination(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 		if (!(await assertUserMatches(interaction, userId, lang))) return;
@@ -161,7 +161,7 @@ async function handleEmojiEditPagination(interaction) {
 		}
 		await showEmojiEditSelection(interaction, newPage, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiEditPagination');
+		await handleError(interaction, lang, error, 'handleEmojiEditPagination');
 	}
 }
 
@@ -170,7 +170,7 @@ async function handleEmojiEditPagination(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleEmojiEditSelection(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[3];
@@ -187,7 +187,7 @@ async function handleEmojiEditSelection(interaction) {
 		const setId = parseInt(interaction.values[0], 10);
 		await showEmojiEditor(interaction, setId, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiEditSelection');
+		await handleError(interaction, lang, error, 'handleEmojiEditSelection');
 	}
 }
 

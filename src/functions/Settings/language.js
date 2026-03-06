@@ -10,10 +10,10 @@ const {
     SeparatorBuilder,
     SeparatorSpacingSize
 } = require('discord.js');
-const { adminQueries } = require('../utility/database');
+const { userQueries } = require('../utility/database');
 const languages = require('../../i18n');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin, getGlobalEmojiMap, wrapLangWithEmojis } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser, getGlobalEmojiMap, wrapLangWithEmojis } = require('../utility/emojis');
 
 /**
  * Creates a change language button
@@ -26,7 +26,7 @@ function createChangeLanguageButton(userId, lang = {}) {
         .setCustomId(`change_language_${userId}`)
         .setLabel(lang.settings.mainPage.buttons.language)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1018'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1018'));
 }
 
 /**
@@ -35,7 +35,7 @@ function createChangeLanguageButton(userId, lang = {}) {
  */
 async function handleChangeLanguageButton(interaction) {
     // Get user's language preference
-    const { adminData, userLang, lang } = getAdminLang(interaction.user.id);
+    const { userData, userLang, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2];
@@ -43,7 +43,7 @@ async function handleChangeLanguageButton(interaction) {
         // Check if the interaction user matches the expected user
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        if (!adminData) {   
+        if (!userData) {   
             return await interaction.reply({
                 content: lang.common.noPermission,
                 ephemeral: true
@@ -59,7 +59,7 @@ async function handleChangeLanguageButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleChangeLanguageButton');
+        await handleError(interaction, lang, error, 'handleChangeLanguageButton');
     }
 }
 
@@ -98,7 +98,7 @@ function createLanguageSelectMenu(authorId) {
  * @returns {Object} Object containing embed and components
  */
 function createLanguageSelectionForm(userLang = 'en', interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     const availableLanguages = getAvailableLanguages(interaction.user.id);
 
     // Default to 'en' if user has no language selected yet
@@ -144,7 +144,7 @@ function createLanguageSelectionForm(userLang = 'en', interaction) {
  */
 async function handleLanguageSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, userData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract expected user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2];
@@ -152,8 +152,8 @@ async function handleLanguageSelection(interaction) {
         // Check if the interaction user matches the expected user
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        // Check if user is an admin
-        if (!adminData) {
+        // Must have a users record (created on /panel or upserted before showing this form)
+        if (!userData) {
             return await interaction.reply({
                 content: lang.common.noPermission,
                 ephemeral: true
@@ -161,9 +161,10 @@ async function handleLanguageSelection(interaction) {
         }
 
         const selectedLanguage = interaction.values[0];
+        const isFirstTimeSelection = !userData.language;
 
-        // Update admin language in database
-        adminQueries.updateAdminLanguage(selectedLanguage, interaction.user.id);
+        // Update language in users table
+        userQueries.updateLanguage(selectedLanguage, interaction.user.id);
 
         const successContainer = new ContainerBuilder()
             .setAccentColor(0x57F287)
@@ -178,16 +179,10 @@ async function handleLanguageSelection(interaction) {
         });
 
 
-        // Wait 3 seconds then show the appropriate embed
+        // Wait 1 second then show the appropriate panel
         setTimeout(async () => {
             try {
-                // Get updated admin data to ensure we have the latest language setting
-                const updatedAdminData = adminQueries.getAdmin(interaction.user.id);
-
-                // Check if this was a first-time language selection (previous language was "NA")
-                const isFirstTimeSelection = adminData.language === 'NA';
-
-                const userLang = updatedAdminData.language || selectedLanguage;
+                const userLang = selectedLanguage;
                 let baseLang = languages[userLang];
 
                 // Fallback to English if language not found
@@ -196,42 +191,47 @@ async function handleLanguageSelection(interaction) {
                 }
 
                 // Wrap language with emoji processing
-                const emojiMap = getEmojiMapForAdmin(interaction.user.id);
-                const lang = wrapLangWithEmojis(baseLang, emojiMap);
+                const emojiMap = getEmojiMapForUser(interaction.user.id);
+                const freshLang = wrapLangWithEmojis(baseLang, emojiMap);
 
                 if (isFirstTimeSelection) {
-                    // First-time admin - show main panel
+                    // First-time selection — show the appropriate panel
                     const panel = require('../../commands/panel');
-                    const { components } = panel.createPanelContainer(interaction, updatedAdminData, lang);
-
-                    await interaction.editReply({
-                        components: components,
-                        flags: MessageFlags.IsComponentsV2
-                    });
-
+                    if (adminData) {
+                        // Admin: show full admin panel
+                        const { components } = panel.createPanelContainer(interaction, adminData, freshLang);
+                        await interaction.editReply({
+                            components: components,
+                            flags: MessageFlags.IsComponentsV2
+                        });
+                    } else {
+                        // Regular user: show user panel
+                        const { components } = panel.createUserPanelContainer(interaction, freshLang);
+                        await interaction.editReply({
+                            components: components,
+                            flags: MessageFlags.IsComponentsV2
+                        });
+                    }
                 } else {
-                    // Regular admin - show settings
+                    // Language changed from settings — go back to settings
                     const { createSettingsComponents } = require('./settings');
-                    const settingsContainer = createSettingsComponents(interaction, updatedAdminData, lang);
+                    const settingsContainer = createSettingsComponents(interaction, adminData, freshLang);
 
-                    // Update the message to show the settings with new language
                     await interaction.editReply({
                         components: settingsContainer,
                         flags: MessageFlags.IsComponentsV2
                     });
-
                 }
 
             } catch (error) {
-                await sendError(interaction, lang, error, 'handleLanguageSelection', false);
+                await handleError(interaction, lang, error, 'handleLanguageSelection', false);
 
-                // Fallback error message
                 try {
                     const errorContainer = [
                         new ContainerBuilder()
                             .setAccentColor(0xFF0000)
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent('An error occurred while loading settings. Please run `/panel` again.')
+                                new TextDisplayBuilder().setContent('An error occurred while loading. Please run `/panel` again.')
                             )
                     ];
 
@@ -243,10 +243,10 @@ async function handleLanguageSelection(interaction) {
                     // Silently fail - user can retry with /panel
                 }
             }
-        }, 1000); // 1 second delay
+        }, 1000);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleLanguageSelection');
+        await handleError(interaction, lang, error, 'handleLanguageSelection');
     }
 }
 
@@ -257,8 +257,8 @@ async function handleLanguageSelection(interaction) {
  */
 function getUserLanguage(userId) {
     try {
-        const adminData = adminQueries.getAdmin(userId);
-        return adminData?.language || 'en';
+        const userData = userQueries.getUser(userId);
+        return userData?.language || 'en';
     } catch (error) {
         console.error('Error getting user language:', error);
         return 'en';
@@ -271,7 +271,7 @@ function getUserLanguage(userId) {
  * @returns {Array} Array of language options
  */
 function getAvailableLanguages(userId) {
-    const emojiMap = getEmojiMapForAdmin(userId);
+    const emojiMap = getEmojiMapForUser(userId);
     
     // Available language options
     const languageOptions = [

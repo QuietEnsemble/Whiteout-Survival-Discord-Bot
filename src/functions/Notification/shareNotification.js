@@ -15,11 +15,12 @@ const fs = require('fs');
 const path = require('path');
 const { notificationQueries, adminLogQueries } = require('../utility/database');
 const { LOG_CODES } = require('../utility/AdminLogs');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { getFilteredNotifications } = require('./editNotification');
 const { parseMentions } = require('./notificationUtils');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
+const { PERMISSIONS } = require('../Settings/admin/permissions');
 
 const ITEMS_PER_PAGE = 20;
 
@@ -27,7 +28,7 @@ const ITEMS_PER_PAGE = 20;
  * Handle Share Notification button - shows notification selection
  */
 async function handleShareNotificationButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[2];
@@ -37,7 +38,7 @@ async function handleShareNotificationButton(interaction) {
         await showTypeSelection(interaction, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleShareNotificationButton');
+        await handleError(interaction, lang, error, 'handleShareNotificationButton');
     }
 }
 
@@ -45,17 +46,21 @@ async function handleShareNotificationButton(interaction) {
  * Show notification type selection (server or private)
  */
 async function showTypeSelection(interaction, lang) {
+    const { adminData } = getUserInfo(interaction.user.id);
+    const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+
     const serverButton = new ButtonBuilder()
         .setCustomId(`template_share_type_server_${interaction.user.id}`)
         .setLabel(lang.notification.shareNotification.buttons.serverNotifications)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022'))
+        .setDisabled(!hasAccess);
 
     const privateButton = new ButtonBuilder()
         .setCustomId(`template_share_type_private_${interaction.user.id}`)
         .setLabel(lang.notification.shareNotification.buttons.privateNotifications)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1029'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1029'));
 
     const buttonRow = new ActionRowBuilder().addComponents(serverButton, privateButton);
 
@@ -84,7 +89,7 @@ async function showTypeSelection(interaction, lang) {
  * Handle type selection button
  */
 async function handleTypeSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -92,6 +97,13 @@ async function handleTypeSelection(interaction) {
         const userId = parts[4];
 
         if (!(await assertUserMatches(interaction, userId, lang))) return;
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+
+        if (type === 'server' && !hasAccess) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
 
         // Get filtered notifications
         const notifications = getFilteredNotifications(type, interaction.user.id, adminData);
@@ -119,7 +131,7 @@ async function handleTypeSelection(interaction) {
         await showNotificationSelection(interaction, notifications, 1, type, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTypeSelection');
+        await handleError(interaction, lang, error, 'handleTypeSelection');
     }
 }
 
@@ -139,7 +151,7 @@ async function showNotificationSelection(interaction, notifications, page, type,
             label: notification.name.substring(0, 100),
             value: `template_export_${notification.id}`,
             description: lang.notification.shareNotification.selectMenu.description.substring(0, 100).replace('{createdBy}', creator.username || 'Unknown'),
-            emoji: notification.is_active ? getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022') : getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1052')
+            emoji: notification.is_active ? getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022') : getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1052')
         };
     })
     );
@@ -190,18 +202,25 @@ async function showNotificationSelection(interaction, notifications, page, type,
  * Handle pagination for export selection
  */
 async function handleExportPagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const { userId, newPage, subtype } = parsePaginationCustomId(interaction.customId, 0);
 
         if (!(await assertUserMatches(interaction, userId, lang))) return;
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+
+        if (subtype === 'server' && !hasAccess) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         const notifications = getFilteredNotifications(subtype, interaction.user.id, adminData);
         await showNotificationSelection(interaction, notifications, newPage, subtype, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleExportPagination');
+        await handleError(interaction, lang, error, 'handleExportPagination');
     }
 }
 
@@ -305,7 +324,7 @@ function exportNotificationToJSON(notification, lang) {
  * Handle notification export selection
  */
 async function handleNotificationExportSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -325,7 +344,13 @@ async function handleNotificationExportSelection(interaction) {
             });
         }
 
-        // await interaction.deferUpdate();
+        // Re-check permissions at export time based on notification type (components don't expire)
+        const hasServerPermission = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+
+        if (notification.guild_id && !hasServerPermission) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
 
         const jsonData = exportNotificationToJSON(notification, lang);
         const jsonString = JSON.stringify(jsonData, null, 2);
@@ -392,12 +417,12 @@ async function handleNotificationExportSelection(interaction) {
             try {
                 await fs.promises.unlink(filePath);
             } catch (error) {
-                await sendError(null, null, error, 'handleNotificationExportSelection - File Cleanup', false);
+                await handleError(null, null, error, 'handleNotificationExportSelection - File Cleanup', false);
             }
         }, 5000);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleNotificationExportSelection');
+        await handleError(interaction, lang, error, 'handleNotificationExportSelection');
     }
 }
 

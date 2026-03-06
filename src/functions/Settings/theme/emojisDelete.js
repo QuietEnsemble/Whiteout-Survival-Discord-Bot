@@ -11,10 +11,10 @@ const {
 	TextDisplayBuilder
 } = require('discord.js');
 const { Routes } = require('discord.js');
-const { customEmojiQueries, adminQueries } = require('../../utility/database');
+const { customEmojiQueries, userQueries } = require('../../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { PERMISSIONS } = require('../admin/permissions');
 const ITEMS_PER_PAGE = 24;
 
@@ -29,11 +29,11 @@ function createEmojiDeleteButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_delete_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.deletePack)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1046'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
 
 async function handleEmojiDeleteButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -49,7 +49,7 @@ async function handleEmojiDeleteButton(interaction) {
 
 		await showEmojiDeleteSelection(interaction, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiDeleteButton');
+		await handleError(interaction, lang, error, 'handleEmojiDeleteButton');
 	}
 }
 
@@ -93,7 +93,7 @@ async function showEmojiDeleteSelection(interaction, page, lang) {
 				.setLabel(set.name)
 				.setValue(String(set.id))
 				.setDescription(isActive ? lang.settings.theme.deletePack.selectMenu.packSelect.description.active : lang.settings.theme.deletePack.selectMenu.packSelect.description.inactive)
-				.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), isActive ? '1004' : '1039'))
+				.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), isActive ? '1004' : '1039'))
 		);
 	});
 
@@ -133,7 +133,7 @@ async function showEmojiDeleteSelection(interaction, page, lang) {
 }
 
 async function handleEmojiDeletePagination(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 		if (!(await assertUserMatches(interaction, userId, lang))) return;
@@ -146,12 +146,12 @@ async function handleEmojiDeletePagination(interaction) {
 		}
 		await showEmojiDeleteSelection(interaction, newPage, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiDeletePagination');
+		await handleError(interaction, lang, error, 'handleEmojiDeletePagination');
 	}
 }
 
 async function handleEmojiDeleteSelection(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const expectedUserId = parts[3];
@@ -206,12 +206,12 @@ async function handleEmojiDeleteSelection(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiDeleteSelection');
+		await handleError(interaction, lang, error, 'handleEmojiDeleteSelection');
 	}
 }
 
 async function handleEmojiDeleteConfirm(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const setId = parseInt(parts[3], 10);
@@ -257,10 +257,10 @@ async function handleEmojiDeleteConfirm(interaction) {
 			if (defaultSet?.id) customEmojiQueries.setActiveCustomEmojiSet(defaultSet.id);
 		}
 
-		// Reset all admins using this pack to null (will use default pack)
-		const admins = adminQueries.getAdminsByCustomEmoji(setId);
-		admins.forEach(row => {
-			adminQueries.updateAdminCustomEmoji(null, row.user_id);
+		// Reset all users using this pack to null (will use default pack)
+		const users = userQueries.getUsersByCustomEmoji(setId);
+		users.forEach(row => {
+			userQueries.updateCustomEmoji(null, row.user_id);
 		});
 
 		if (set.data) {
@@ -307,12 +307,12 @@ async function handleEmojiDeleteConfirm(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiDeleteConfirm');
+		await handleError(interaction, lang, error, 'handleEmojiDeleteConfirm');
 	}
 }
 
 async function handleEmojiDeleteCancel(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -327,7 +327,7 @@ async function handleEmojiDeleteCancel(interaction) {
 
 		await showEmojiDeleteSelection(interaction, 0, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiDeleteCancel');
+		await handleError(interaction, lang, error, 'handleEmojiDeleteCancel');
 	}
 }
 

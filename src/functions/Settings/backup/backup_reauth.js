@@ -1,6 +1,6 @@
 const { ButtonBuilder, ButtonStyle, TextDisplayBuilder, SeparatorSpacingSize, SeparatorBuilder, ContainerBuilder, MessageFlags, ActionRowBuilder } = require('discord.js');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../../utility/emojis');
 const { settingsQueries } = require('../../utility/database');
 
 /**
@@ -14,7 +14,7 @@ function createBackupResetOAuthButton(userId, lang = {}) {
 		.setCustomId(`db_backup_reset_oauth_${userId}`)
 		.setLabel(lang.settings.backup.mainPage.buttons.resetOAuth)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1046'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
 
 /**
@@ -22,7 +22,7 @@ function createBackupResetOAuthButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleResetOAuthButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[4]; // db_backup_reset_oauth_userId
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -39,13 +39,13 @@ async function handleResetOAuthButton(interaction) {
 			.setCustomId(`db_backup_reset_oauth_confirm_${interaction.user.id}`)
 			.setLabel(lang.settings.backup.resetOAuth.buttons.confirm)
 			.setStyle(ButtonStyle.Danger)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004'));
 
 		const cancelButton = new ButtonBuilder()
 			.setCustomId(`db_backup_reset_oauth_cancel_${interaction.user.id}`)
 			.setLabel(lang.settings.backup.resetOAuth.buttons.cancel)
 			.setStyle(ButtonStyle.Secondary)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'));
 
 		const buttonRow = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
 
@@ -69,7 +69,7 @@ async function handleResetOAuthButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleResetOAuthButton');
+		await handleError(interaction, lang, error, 'handleResetOAuthButton');
 	}
 }
 
@@ -78,7 +78,7 @@ async function handleResetOAuthButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleResetOAuthConfirm(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[5]; // db_backup_reset_oauth_confirm_userId
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -116,7 +116,7 @@ async function handleResetOAuthConfirm(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleResetOAuthConfirm');
+		await handleError(interaction, lang, error, 'handleResetOAuthConfirm');
 	}
 }
 
@@ -125,7 +125,7 @@ async function handleResetOAuthConfirm(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleResetOAuthCancel(interaction) {
-	const { lang } = getAdminLang(interaction.user.id);
+	const { lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[5]; // db_backup_reset_oauth_cancel_userId
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -147,7 +147,7 @@ async function handleResetOAuthCancel(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleResetOAuthCancel');
+		await handleError(interaction, lang, error, 'handleResetOAuthCancel');
 	}
 }
 

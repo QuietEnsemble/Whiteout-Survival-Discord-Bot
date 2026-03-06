@@ -16,8 +16,8 @@ const { adminQueries, adminLogQueries, systemLogQueries } = require('../../utili
 const { LOG_CODES } = require('../../utility/AdminLogs');
 const { PERMISSIONS, getPermissionDescriptions } = require('./permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 
 /**
@@ -29,9 +29,9 @@ const { adminUsernameCache } = require('../../utility/adminUsernameCache');
 function createEditAdminButton(userId, lang = {}) {
     return new ButtonBuilder()
         .setCustomId(`edit_admin_${userId}`)
-        .setLabel(lang.settings.adminManagement.buttons.assignPermissions)
+        .setLabel(lang.settings.adminManagement.mainPage.buttons.assignPermissions)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1008'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1008'));
 }
 
 /**
@@ -40,7 +40,7 @@ function createEditAdminButton(userId, lang = {}) {
  */
 async function handleEditAdminButton(interaction) {
     // Get user's language preference for error message
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // edit_admin_userId
@@ -62,7 +62,7 @@ async function handleEditAdminButton(interaction) {
 
         if (allAdmins.length === 0) {
             return await interaction.reply({
-                content: lang.settings.assignAdmin.error.noAdmins,
+                content: lang.settings.adminManagement.assignAdmin.error.noAdmins,
                 ephemeral: true
             });
         }
@@ -71,7 +71,7 @@ async function handleEditAdminButton(interaction) {
         await showEditAdminPage(interaction, allAdmins, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAdminButton');
+        await handleError(interaction, lang, error, 'handleEditAdminButton');
     }
 }
 
@@ -92,7 +92,7 @@ async function showEditAdminPage(interaction, allAdmins, page = 0, lang) {
     // Create admin select menu
     const adminSelect = new StringSelectMenuBuilder()
         .setCustomId(`select_admin_edit_${interaction.user.id}_${page}`)
-        .setPlaceholder(lang.settings.assignAdmin.selectMenu.adminSelect.placeholder)
+        .setPlaceholder(lang.settings.adminManagement.assignAdmin.selectMenu.adminSelect.placeholder)
         .setMinValues(1)
         .setMaxValues(1);
 
@@ -113,14 +113,14 @@ async function showEditAdminPage(interaction, allAdmins, page = 0, lang) {
             }
         });
 
-        const permissionText = permissionNames.length > 0 ? permissionNames.join(', ') : lang.settings.assignAdmin.content.noPermissions;
+        const permissionText = permissionNames.length > 0 ? permissionNames.join(', ') : lang.settings.adminManagement.assignAdmin.content.noPermissions;
 
         adminSelect.addOptions(
             new StringSelectMenuOptionBuilder()
                 .setLabel(userTag)
                 .setValue(admin.user_id)
                 .setDescription(permissionText.length > 100 ? permissionText.substring(0, 97) + '...' : permissionText)
-                .setEmoji(getComponentEmoji(getEmojiMapForAdmin(admin.user_id), '1026'))
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(admin.user_id), '1026'))
         );
     }
 
@@ -142,8 +142,8 @@ async function showEditAdminPage(interaction, allAdmins, page = 0, lang) {
             .setAccentColor(0x3498db)
             .addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
-                    `${lang.settings.assignAdmin.content.title.base}\n` +
-                    `${lang.settings.assignAdmin.content.description.base}\n` +
+                    `${lang.settings.adminManagement.assignAdmin.content.title.base}\n` +
+                    `${lang.settings.adminManagement.assignAdmin.content.description.base}\n` +
                     `${lang.pagination.text.pageInfo
                         .replace('{current}', (page + 1).toString())
                         .replace('{total}', totalPages.toString())}`
@@ -170,7 +170,7 @@ async function showEditAdminPage(interaction, allAdmins, page = 0, lang) {
  */
 async function handleEditAdminSelection(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and page from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -193,7 +193,7 @@ async function handleEditAdminSelection(interaction) {
         const selectedAdminData = adminQueries.getAdmin(selectedAdminId);
         if (!selectedAdminData) {
             return await interaction.reply({
-                content: lang.settings.assignAdmin.error.userNotAdmin
+                content: lang.settings.adminManagement.assignAdmin.error.userNotAdmin
             });
         }
 
@@ -218,7 +218,7 @@ async function handleEditAdminSelection(interaction) {
         // Create permission select menu (multi-select)
         const permissionSelect = new StringSelectMenuBuilder()
             .setCustomId(`select_permissions_${interaction.user.id}_${selectedAdminId}`)
-            .setPlaceholder(lang.settings.assignAdmin.selectMenu.permissionSelect.placeholder)
+            .setPlaceholder(lang.settings.adminManagement.assignAdmin.selectMenu.permissionSelect.placeholder)
             .setMinValues(0)
             .setMaxValues(Object.keys(permissionDescriptions).length);
 
@@ -250,10 +250,10 @@ async function handleEditAdminSelection(interaction) {
                         )
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(
-                                `${lang.settings.assignAdmin.content.title.edit}\n` +
-                                `${lang.settings.assignAdmin.content.description.selectPermissions.replace('{admin}', selectedUser.tag)}\n` +
-                                `${lang.settings.assignAdmin.content.availablePermissionsField.name}\n` +
-                                lang.settings.assignAdmin.content.availablePermissionsField.value.replace('{permissionsList}', permissionFields)
+                                `${lang.settings.adminManagement.assignAdmin.content.title.edit}\n` +
+                                `${lang.settings.adminManagement.assignAdmin.content.description.selectPermissions.replace('{admin}', selectedUser.tag)}\n` +
+                                `${lang.settings.adminManagement.assignAdmin.content.availablePermissionsField.name}\n` +
+                                lang.settings.adminManagement.assignAdmin.content.availablePermissionsField.value.replace('{permissionsList}', permissionFields)
                             )
                         )
                 ).addSeparatorComponents(
@@ -272,7 +272,7 @@ async function handleEditAdminSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAdminSelection');
+        await handleError(interaction, lang, error, 'handleEditAdminSelection');
     }
 }
 
@@ -282,7 +282,7 @@ async function handleEditAdminSelection(interaction) {
  */
 async function handlePermissionSelection(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID and admin ID from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -354,13 +354,13 @@ async function handlePermissionSelection(interaction) {
                             )
                             .addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent(
-                                    `${lang.settings.assignAdmin.content.title.success}\n` +
-                                    `${lang.settings.assignAdmin.content.description.success.replace('{admin}', adminToEdit.tag)}\n` +
-                                    `${lang.settings.assignAdmin.content.updatedPermissionsField.name}\n` +
+                                    `${lang.settings.adminManagement.assignAdmin.content.title.success}\n` +
+                                    `${lang.settings.adminManagement.assignAdmin.content.description.success.replace('{admin}', adminToEdit.tag)}\n` +
+                                    `${lang.settings.adminManagement.assignAdmin.content.updatedPermissionsField.name}\n` +
                                     (selectedPermissions.length > 0 ?
-                                        lang.settings.assignAdmin.content.updatedPermissionsField.value
+                                        lang.settings.adminManagement.assignAdmin.content.updatedPermissionsField.value
                                             .replace('{permissionsList}', selectedPermissions.map(perm => `  - ${perm}`).join('\n'))
-                                        : lang.settings.assignAdmin.content.noPermissions)
+                                        : lang.settings.adminManagement.assignAdmin.content.noPermissions)
                                 )
                             )
                     )
@@ -375,11 +375,11 @@ async function handlePermissionSelection(interaction) {
             });
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handlePermissionSelection_dbError');
+            await handleError(interaction, lang, dbError, 'handlePermissionSelection_dbError');
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePermissionSelection');
+        await handleError(interaction, lang, error, 'handlePermissionSelection');
     }
 }
 
@@ -389,7 +389,7 @@ async function handlePermissionSelection(interaction) {
  */
 async function handleEditAdminPagination(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Parse pagination data
         const { userId: expectedUserId, newPage } = parsePaginationCustomId(interaction.customId, 0);
@@ -410,10 +410,10 @@ async function handleEditAdminPagination(interaction) {
         );
 
         // Show the requested page
-        await showEditAdminPage(interaction, allAdmins, newPage, adminData.language || 'en');
+        await showEditAdminPage(interaction, allAdmins, newPage, userLang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEditAdminPagination');
+        await handleError(interaction, lang, error, 'handleEditAdminPagination');
     }
 }
 

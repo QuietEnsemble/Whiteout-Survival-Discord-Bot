@@ -148,21 +148,6 @@ async function createProcess(processData) {
 
         const processId = result.lastInsertRowid;
 
-        // Log process creation
-        systemLogQueries.addLog(
-            'process',
-            `Process created: ${action} for alliance ${allianceIdInt}`,
-            JSON.stringify({
-                process_id: processId,
-                action,
-                alliance_id: allianceIdInt,
-                priority,
-                player_count: playerIdArray.length,
-                created_by: admin_id,
-                function: 'createProcess'
-            })
-        );
-
         return {
             process_id: processId,
             status: PROCESS_STATUS.QUEUED,

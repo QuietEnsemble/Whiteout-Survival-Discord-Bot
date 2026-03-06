@@ -19,8 +19,8 @@ const { Routes } = require('discord.js');
 const { customEmojiQueries } = require('../../utility/database');
 const { EMOJI_DEFINITIONS } = require('../../utility/emojis');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { PERMISSIONS } = require('../admin/permissions');
 const { getAvailableEmojiSlots } = require('./emojisUploader');
 
@@ -175,7 +175,7 @@ async function showEmojiEditor(interaction, setId, page, lang) {
 			.setCustomId(`emoji_editor_open_${setId}_${key}_${page}_${interaction.user.id}`)
 			.setLabel(lang.settings.theme.packEditor.buttons.editEmoji)
 			.setStyle(ButtonStyle.Secondary)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1008'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1008'));
 
 
 		const section = new SectionBuilder()
@@ -204,7 +204,7 @@ async function showEmojiEditor(interaction, setId, page, lang) {
 		.setCustomId(`emoji_theme_${interaction.user.id}`)
 		.setLabel(lang.settings.theme.packEditor.buttons.savePack)
 		.setStyle(ButtonStyle.Primary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1037'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1037'));
 
 	// Add pagination with save button in the same row
 	const paginationRow = createUniversalPaginationButtons({
@@ -233,7 +233,7 @@ async function showEmojiEditor(interaction, setId, page, lang) {
 }
 
 async function handleEmojiEditorButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const setId = parseInt(parts[3], 10);
@@ -280,12 +280,12 @@ async function handleEmojiEditorButton(interaction) {
 		modal.addLabelComponents(emojiLabel, fileLabel);
 		await interaction.showModal(modal);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiEditorButton');
+		await handleError(interaction, lang, error, 'handleEmojiEditorButton');
 	}
 }
 
 async function handleEmojiEditorModal(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const parts = interaction.customId.split('_');
 		const setId = parseInt(parts[3], 10);
@@ -397,12 +397,12 @@ async function handleEmojiEditorModal(interaction) {
 
 		await showEmojiEditor(interaction, setId, page, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiEditorModal');
+		await handleError(interaction, lang, error, 'handleEmojiEditorModal');
 	}
 }
 
 async function handleEmojiEditorPagination(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const { userId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 1);
 		if (!(await assertUserMatches(interaction, userId, lang))) return;
@@ -416,7 +416,7 @@ async function handleEmojiEditorPagination(interaction) {
 		const setId = parseInt(contextData[0], 10);
 		await showEmojiEditor(interaction, setId, newPage, lang);
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiEditorPagination');
+		await handleError(interaction, lang, error, 'handleEmojiEditorPagination');
 	}
 }
 

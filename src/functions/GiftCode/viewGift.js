@@ -1,8 +1,8 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { giftCodeQueries, giftCodeUsageQueries } = require('../utility/database');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji, replaceEmojiPlaceholders } = require('../utility/emojis');
+const { handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji, replaceEmojiPlaceholders } = require('../utility/emojis');
 
 /**
  * Creates a view gift codes button
@@ -15,7 +15,7 @@ function createViewGiftButton(userId, lang = {}) {
         .setCustomId(`view_gift_${userId}`)
         .setLabel(lang.giftCode.mainPage.buttons.viewGiftCodes)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1049'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1049'));
 }
 
 /**
@@ -25,7 +25,7 @@ function createViewGiftButton(userId, lang = {}) {
  */
 async function handleViewGiftButton(interaction) {
     // Get language preference first (needed for all messages including errors)
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract user ID from custom ID for security check
@@ -72,7 +72,7 @@ async function handleViewGiftButton(interaction) {
         await displayGiftCodePage(interaction, giftCodesWithUsage, currentPage, totalPages, itemsPerPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewGiftButton');
+        await handleError(interaction, lang, error, 'handleViewGiftButton');
     }
 }
 
@@ -83,7 +83,7 @@ async function handleViewGiftButton(interaction) {
  */
 async function handleViewGiftPagination(interaction) {
     // Get language preference first (needed for all messages including errors)
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
 
@@ -129,7 +129,7 @@ async function handleViewGiftPagination(interaction) {
         await displayGiftCodePage(interaction, giftCodesWithUsage, newPage, totalPages, itemsPerPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleViewGiftPagination');
+        await handleError(interaction, lang, error, 'handleViewGiftPagination');
     }
 }
 
@@ -164,7 +164,7 @@ async function displayGiftCodePage(interaction, giftCodes, currentPage, totalPag
         lang: lang
     });
 
-    const emojiMap = getEmojiMapForAdmin(interaction.user.id);
+    const emojiMap = getEmojiMapForUser(interaction.user.id);
 
     const container = [
         new ContainerBuilder()

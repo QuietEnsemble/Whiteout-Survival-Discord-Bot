@@ -12,8 +12,8 @@ const https = require('https');
 const { Routes } = require('discord.js');
 const { customEmojiQueries } = require('../../utility/database');
 const { uploadEmojiPackFromJson } = require('./emojisUploader');
-const { getAdminLang, assertUserMatches, sendError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, updateComponentsV2AfterSeparator, hasPermission } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { PERMISSIONS } = require('../admin/permissions');
 /**
  * Creates emoji reload button
@@ -26,7 +26,7 @@ function createEmojiReloadButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_reload_${userId}`)
 		.setLabel(lang.settings.theme.mainPage.buttons.reloadDefaults)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033'));
 }
 
 /**
@@ -34,7 +34,7 @@ function createEmojiReloadButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiReloadDefaultButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[3];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -53,13 +53,13 @@ async function handleEmojiReloadDefaultButton(interaction) {
 			.setCustomId(`emoji_theme_reload_confirm_${interaction.user.id}`)
 			.setLabel(lang.settings.theme.reloadDefaults.buttons.confirm)
 			.setStyle(ButtonStyle.Danger)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004'));
 
 		const cancelButton = new ButtonBuilder()
 			.setCustomId(`emoji_theme_${interaction.user.id}`)
 			.setLabel(lang.settings.theme.reloadDefaults.buttons.cancel)
 			.setStyle(ButtonStyle.Secondary)
-			.setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'));
+			.setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'));
 
 		const buttonRow = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
 
@@ -83,7 +83,7 @@ async function handleEmojiReloadDefaultButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiReloadDefaultButton');
+		await handleError(interaction, lang, error, 'handleEmojiReloadDefaultButton');
 	}
 }
 
@@ -92,7 +92,7 @@ async function handleEmojiReloadDefaultButton(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiReloadConfirmButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[4];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -162,7 +162,7 @@ async function handleEmojiReloadConfirmButton(interaction) {
 		await fs.promises.unlink(tempPath);
 
 		// Refresh lang and adminData to load new emoji pack's IDs
-		const { adminData: freshAdminData, lang: freshLang } = getAdminLang(interaction.user.id);
+		const { adminData: freshAdminData, lang: freshLang } = getUserInfo(interaction.user.id);
 
 		// Success - rebuild entire emoji theme page with new emojis
 		const { createEmojiThemeContainer } = require('./emojis');
@@ -173,8 +173,8 @@ async function handleEmojiReloadConfirmButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		const { lang: freshLang } = getAdminLang(interaction.user.id);
-		await sendError(interaction, freshLang, error, 'handleEmojiReloadConfirmButton');
+		const { lang: freshLang } = getUserInfo(interaction.user.id);
+		await handleError(interaction, freshLang, error, 'handleEmojiReloadConfirmButton');
 	}
 }
 

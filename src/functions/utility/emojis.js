@@ -1,4 +1,4 @@
-const { adminQueries, customEmojiQueries } = require('./database');
+const { userQueries, customEmojiQueries } = require('./database');
 
 const EMOJI_DEFINITIONS = [
     { key: 1000, name: 'plus', fallback: '➕' },
@@ -91,9 +91,9 @@ function buildEmojiMapFromSetData(setData) {
     return map;
 }
 
-function getEmojiMapForAdmin(userId) {
-    const admin = adminQueries.getAdmin(userId);
-    const customEmojiId = admin?.custom_emoji;
+function getEmojiMapForUser(userId) {
+    const user = userQueries.getUser(userId);
+    const customEmojiId = user?.custom_emoji;
     const set = customEmojiId
         ? customEmojiQueries.getCustomEmojiSetById(customEmojiId)
         : customEmojiQueries.getActiveCustomEmojiSet();
@@ -120,11 +120,11 @@ function replaceEmojiPlaceholders(text, emojiMap = {}) {
 
 /**
  * Extracts emoji ID for use in buttons/select menus from emoji map
- * @param {Object} emojiMap - The emoji map from getEmojiMapForAdmin()
+ * @param {Object} emojiMap - The emoji map from getEmojiMapForUser()
  * @param {string} key - The emoji key (e.g., 'shield' or '1001')
  * @returns {string|null} The emoji ID or unicode emoji for .setEmoji()
  * @example
- * const emojiMap = getEmojiMapForAdmin(userId);
+ * const emojiMap = getEmojiMapForUser(userId);
  * button.setEmoji(getComponentEmoji(emojiMap, 'shield'));
  * button.setEmoji(getComponentEmoji(emojiMap, '1001'));
  */
@@ -151,7 +151,7 @@ function getComponentEmoji(emojiMap, key) {
 /**
  * Wraps a language object with automatic emoji placeholder replacement
  * @param {Object} langObject - The language object from i18n
- * @param {Object} emojiMap - The emoji map from getEmojiMapForAdmin()
+ * @param {Object} emojiMap - The emoji map from getEmojiMapForUser()
  * @returns {Proxy} A proxied language object that auto-replaces emoji placeholders
  * @example
  * const lang = wrapLangWithEmojis(languages[userLang], emojiMap);
@@ -184,7 +184,7 @@ module.exports = {
     EMOJI_DEFINITIONS,
     getEmojiDefinitions,
     buildEmojiMapFromSetData,
-    getEmojiMapForAdmin,
+    getEmojiMapForUser,
     getGlobalEmojiMap,
     replaceEmojiPlaceholders,
     getComponentEmoji,

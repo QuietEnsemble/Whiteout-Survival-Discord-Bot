@@ -1,9 +1,11 @@
 const { ButtonBuilder, ButtonStyle, EmbedBuilder, ActionRowBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } = require('discord.js');
 const { adminQueries, notificationQueries, adminLogQueries } = require('../utility/database');
 const { LOG_CODES } = require('../utility/AdminLogs');
-const { getAdminLang, assertUserMatches, sendError } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
 const { extractMentionTags, convertTagsToMentions, parseMentions, calculateEmbedSize } = require('./notificationUtils');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
+const { PERMISSIONS } = require('../Settings/admin/permissions');
+const { checkFeatureAccess } = require('../utility/checkAccess');
 
 // Module reference for processMentionsAfterContentUpdate (set externally)
 let processMentionsAfterContentUpdateRef = null;
@@ -31,19 +33,19 @@ async function sendNotificationEditorMessage(interaction, notificationId, type, 
         .setCustomId(`notification_edit_message_${notificationId}_${interaction.user.id}`)
         .setLabel(lang.notification.notificationEditor.buttons.messageContent)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1008'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1008'));
 
     const toggleEmbedButton = new ButtonBuilder()
         .setCustomId(`notification_toggle_embed_${notificationId}_${interaction.user.id}`)
         .setLabel(lang.notification.notificationEditor.buttons.toggleEmbed)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1041'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1041'));
 
     const saveButton = new ButtonBuilder()
         .setCustomId(`notification_save_${notificationId}_${interaction.user.id}`)
         .setLabel(lang.notification.notificationEditor.buttons.save)
         .setStyle(ButtonStyle.Success)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1037'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1037'));
 
     const row = new ActionRowBuilder().addComponents(messageButton, toggleEmbedButton, saveButton);
 
@@ -57,7 +59,7 @@ async function sendNotificationEditorMessage(interaction, notificationId, type, 
  * Handle message content edit button
  */
 async function handleEditMessageButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const [, , , notificationId, userId] = interaction.customId.split('_');
@@ -71,6 +73,17 @@ async function handleEditMessageButton(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermission = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermission) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         const modal = new ModalBuilder()
@@ -95,7 +108,7 @@ async function handleEditMessageButton(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        sendError(interaction, lang, error, 'handleEditMessageButton');
+        handleError(interaction, lang, error, 'handleEditMessageButton');
     }
 }
 
@@ -103,7 +116,7 @@ async function handleEditMessageButton(interaction) {
  * Handle message content update modal
  */
 async function handleUpdateMessageModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const [, , , notificationId, userId] = interaction.customId.split('_');
@@ -118,6 +131,17 @@ async function handleUpdateMessageModal(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionMsg = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureMsg = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionMsg) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureMsg) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         // Don't save default values - save as null instead
@@ -167,10 +191,10 @@ async function handleUpdateMessageModal(interaction) {
             }
 
         } catch (dbError) {
-            sendError(interaction, lang, dbError, 'handleUpdateMessageModal');
+            handleError(interaction, lang, dbError, 'handleUpdateMessageModal');
         }
     } catch (error) {
-        sendError(interaction, lang, error, 'handleUpdateMessageModal');
+        handleError(interaction, lang, error, 'handleUpdateMessageModal');
     }
 }
 
@@ -178,7 +202,7 @@ async function handleUpdateMessageModal(interaction) {
  * Handle toggle embed button
  */
 async function handleToggleEmbedButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const [, , , notificationId, userId] = interaction.customId.split('_');
@@ -192,6 +216,17 @@ async function handleToggleEmbedButton(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionToggle = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureToggle = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionToggle) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureToggle) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         const newEmbedToggle = !notification.embed_toggle;
@@ -244,19 +279,19 @@ async function handleToggleEmbedButton(interaction) {
                     .setCustomId(`notification_edit_message_${notificationId}_${userId}`)
                     .setLabel(lang.notification.notificationEditor.modal.messageContent.label)
                     .setStyle(ButtonStyle.Secondary)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1008'));
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1008'));
 
                 const toggleEmbedButton = new ButtonBuilder()
                     .setCustomId(`notification_toggle_embed_${notificationId}_${userId}`)
                     .setLabel(lang.notification.notificationEditor.buttons.toggleEmbed)
                     .setStyle(ButtonStyle.Primary)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1041'));
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1041'));
 
                 const saveButton = new ButtonBuilder()
                     .setCustomId(`notification_save_${notificationId}_${userId}`)
                     .setLabel(lang.notification.notificationEditor.buttons.save)
                     .setStyle(ButtonStyle.Success)
-                    .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1037'));
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1037'));
 
                 const row = new ActionRowBuilder().addComponents(messageButton, toggleEmbedButton, saveButton);
 
@@ -267,10 +302,10 @@ async function handleToggleEmbedButton(interaction) {
                 });
             }
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleToggleEmbedButton');
+            await handleError(interaction, lang, dbError, 'handleToggleEmbedButton');
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleToggleEmbedButton');
+        await handleError(interaction, lang, error, 'handleToggleEmbedButton');
     }
 }
 
@@ -300,19 +335,19 @@ async function showEmbedEditor(interaction, notificationId, lang, useUpdate = tr
             .setCustomId(`notification_edit_message_${notificationId}_${editorUserId}`)
             .setLabel(lang.notification.notificationEditor.modal.messageContent.label)
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1008'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1008'));
 
         const toggleEmbedButton = new ButtonBuilder()
             .setCustomId(`notification_toggle_embed_${notificationId}_${editorUserId}`)
             .setLabel(lang.notification.notificationEditor.buttons.toggleEmbed)
             .setStyle(ButtonStyle.Primary)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1041'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1041'));
 
         const saveButton = new ButtonBuilder()
             .setCustomId(`notification_save_${notificationId}_${editorUserId}`)
             .setLabel(lang.notification.notificationEditor.buttons.save)
             .setStyle(ButtonStyle.Success)
-            .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1037'));
+            .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1037'));
 
         const row = new ActionRowBuilder().addComponents(messageButton, toggleEmbedButton, saveButton);
 
@@ -432,25 +467,25 @@ async function showEmbedEditor(interaction, notificationId, lang, useUpdate = tr
         .setCustomId(`notification_edit_message_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.modal.messageContent.label)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1008'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1008'));
 
     const toggleEmbedButton = new ButtonBuilder()
         .setCustomId(`notification_toggle_embed_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.buttons.toggleEmbed)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1041'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1041'));
 
     const saveButton = new ButtonBuilder()
         .setCustomId(`notification_save_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.buttons.save)
         .setStyle(ButtonStyle.Success)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1037'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1037'));
 
     const helperButton = new ButtonBuilder()
         .setCustomId(`notification_helper_${notificationId}_${editorUserId}_${helperMode ? 'on' : 'off'}`)
         .setLabel(helperMode ? lang.notification.notificationEditor.buttons.disableHelper : lang.notification.notificationEditor.buttons.enableHelper)
         .setStyle(helperMode ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        .setEmoji(helperMode ? getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1049') : getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1038'));
+        .setEmoji(helperMode ? getComponentEmoji(getEmojiMapForUser(editorUserId), '1049') : getComponentEmoji(getEmojiMapForUser(editorUserId), '1038'));
 
     const row1 = new ActionRowBuilder().addComponents(messageButton, toggleEmbedButton, saveButton, helperButton);
 
@@ -458,27 +493,27 @@ async function showEmbedEditor(interaction, notificationId, lang, useUpdate = tr
         .setCustomId(`notification_field_add_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.buttons.addField)
         .setStyle(ButtonStyle.Success)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1000'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1000'));
 
     const editFieldButton = new ButtonBuilder()
         .setCustomId(`notification_field_edit_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.buttons.editField)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1008'))
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1008'))
         .setDisabled(!hasCustomFields);
 
     const removeFieldButton = new ButtonBuilder()
         .setCustomId(`notification_field_remove_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.buttons.removeField)
         .setStyle(ButtonStyle.Danger)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1031'))
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1031'))
         .setDisabled(!hasCustomFields);
 
     const reorderFieldsButton = new ButtonBuilder()
         .setCustomId(`notification_field_reorder_${notificationId}_${editorUserId}`)
         .setLabel(lang.notification.notificationEditor.buttons.reorderFields)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1032'))
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(editorUserId), '1032'))
         .setDisabled(customFieldsCount < 2);
 
     const row2 = new ActionRowBuilder().addComponents(addFieldButton, editFieldButton, removeFieldButton, reorderFieldsButton);
@@ -491,37 +526,37 @@ async function showEmbedEditor(interaction, notificationId, lang, useUpdate = tr
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.title,
                 value: 'title',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1021')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1021')
             },
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.description,
                 value: 'description',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1021')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1021')
             },
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.color,
                 value: 'color',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1003')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1003')
             },
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.image,
                 value: 'image',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1015')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1015')
             },
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.thumbnail,
                 value: 'thumbnail',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1015')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1015')
             },
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.footer,
                 value: 'footer',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1009')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1009')
             },
             {
                 label: lang.notification.notificationEditor.editorSelectMenu.options.author,
                 value: 'author',
-                emoji: getComponentEmoji(getEmojiMapForAdmin(editorUserId), '1026')
+                emoji: getComponentEmoji(getEmojiMapForUser(editorUserId), '1026')
             }
         ]);
 
@@ -548,7 +583,7 @@ async function showEmbedEditor(interaction, notificationId, lang, useUpdate = tr
  * Handle embed component edit buttons
  */
 async function handleEmbedComponentButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -565,6 +600,17 @@ async function handleEmbedComponentButton(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionBtn = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureBtn = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionBtn) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureBtn) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         const componentConfig = getEmbedComponentConfig(notification, component, lang);
@@ -630,7 +676,7 @@ async function handleEmbedComponentButton(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEmbedComponentButton');
+        await handleError(interaction, lang, error, 'handleEmbedComponentButton');
     }
 }
 
@@ -638,7 +684,7 @@ async function handleEmbedComponentButton(interaction) {
  * Handle embed component update modal
  */
 async function handleUpdateEmbedComponentModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const parts = interaction.customId.split('_');
         const component = parts[3];
@@ -655,6 +701,17 @@ async function handleUpdateEmbedComponentModal(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionEmbed = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureEmbed = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionEmbed) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureEmbed) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         const defaultTitle = lang.notification.notificationEditor.defaultValues.embedTitle;
@@ -758,10 +815,10 @@ async function handleUpdateEmbedComponentModal(interaction) {
             }
 
         } catch (dbError) {
-            await sendError(interaction, lang, dbError, 'handleUpdateEmbedComponentModal');
+            await handleError(interaction, lang, dbError, 'handleUpdateEmbedComponentModal');
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleUpdateEmbedComponentModal');
+        await handleError(interaction, lang, error, 'handleUpdateEmbedComponentModal');
     }
 }
 
@@ -769,7 +826,7 @@ async function handleUpdateEmbedComponentModal(interaction) {
  * Handle embed component select menu
  */
 async function handleEmbedSelectMenu(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -786,6 +843,17 @@ async function handleEmbedSelectMenu(interaction) {
                 content: lang.notification.notificationEditor.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionSelect = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureSelect = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionSelect) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureSelect) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         const componentConfig = getEmbedComponentConfig(notification, component, lang);
@@ -847,7 +915,7 @@ async function handleEmbedSelectMenu(interaction) {
         await interaction.showModal(modal);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleEmbedSelectMenu');
+        await handleError(interaction, lang, error, 'handleEmbedSelectMenu');
     }
 }
 
@@ -855,7 +923,7 @@ async function handleEmbedSelectMenu(interaction) {
  * Handle helper button - fills all unconfigured components with default values
  */
 async function handleHelperButton(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const parts = interaction.customId.split('_');
@@ -874,6 +942,17 @@ async function handleHelperButton(interaction) {
             });
         }
 
+        // Re-check permissions at interaction time (components don't expire)
+        const hasServerPermissionHelper = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeatureHelper = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermissionHelper) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeatureHelper) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+
         // Toggle helper mode: if currently 'off', turn 'on' (show defaults), otherwise turn 'off' (hide defaults)
         const newHelperMode = currentState === 'off';
 
@@ -889,7 +968,7 @@ async function handleHelperButton(interaction) {
         );
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleHelperButton');
+        await handleError(interaction, lang, error, 'handleHelperButton');
     }
 }
 

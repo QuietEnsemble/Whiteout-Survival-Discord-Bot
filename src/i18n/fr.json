@@ -23,6 +23,10 @@
                 "settingsField": {
                     "name": "- **Paramètres**",
                     "value": "  - Accéder aux paramètres du bot"
+                },
+                "calculatorsField": {
+                    "name": "- **Calculatrices**",
+                    "value": "  - Accédez à diverses calculatrices pour vous aider dans le jeu"
                 }
             },
             "buttons": {
@@ -32,6 +36,7 @@
                 "notification": "Notifications",
                 "support": "Support",
                 "settings": "Paramètres",
+                "calculators": "Calculatrices",
                 "backToPanel": "Retour"
             },
             "errors": {}
@@ -594,8 +599,8 @@
                     "result": "### {emoji.1041} Résultats du déplacement des joueurs"
                 },
                 "description": {
-                    "base": "Choisissez l'alliance depuis laquelle vous voulez déplacer des joueurs :",
-                    "selectDestination": "Choisissez l'alliance vers laquelle déplacer les joueurs :\n**Alliance source :** {sourceName}",
+                    "base": "Choisissez l'alliance depuis laquelle vous voulez déplacer des joueurs :\n**Alliance cible :** {targetName}",
+                    "selectDestination": "Choisissez l'alliance vers laquelle déplacer les joueurs :",
                     "selectPlayers": "Sélectionnez les joueurs à déplacer :\n**De :** {sourceName}\n**Vers :** {destName}",
                     "success": "Les **{count}** joueurs sélectionnés ont été déplacés avec succès vers **{destName}**.",
                     "cancel": "L'opération de déplacement a été annulée. Aucun joueur n'a été déplacé.",
@@ -603,11 +608,13 @@
                 },
                 "movedField": {
                     "name": "- **Déplacés avec succès**",
-                    "value": "  - {movedCount} joueurs déplacés avec succès de **{sourceName}** vers **{destName}**"
+                    "value": "  - {movedCount} joueurs déplacés avec succès de **{sourceName}** vers **{destName}**",
+                    "valueNoSource": "  - {movedCount} joueurs déplacés avec succès vers **{destName}**"
                 },
                 "notFoundField": {
                     "name": "- **Joueurs introuvables**",
-                    "value": "  - {notFoundCount} joueurs n'ont pas été trouvés dans **{sourceName}**\nIDs : {notFoundIds}"
+                    "value": "  - {notFoundCount} joueurs n'ont pas été trouvés dans **{sourceName}**\nIDs : {notFoundIds}",
+                    "valueNoSource": "  - {notFoundCount} IDs de joueurs introuvables\nIDs : {notFoundIds}"
                 },
                 "availablePlayersField": {
                     "name": "- **Joueurs disponibles à déplacer**",
@@ -616,7 +623,9 @@
                 "wrongAllianceField": {
                     "name": "- **Alliances différentes détectées**",
                     "value": "  - Certains joueurs appartiennent à différentes alliances. Voulez-vous quand même les déplacer ?"
-                }
+                },
+                "listEntry": "  - {name} (ID : {fid})",
+                "andMore": "  - ... et {n} de plus"
             },
             "buttons": {
                 "inputPlayerId": "Par ID",
@@ -794,9 +803,9 @@
                     "value": "  - Voir tous les Cadeaux disponibles"
                 },
                 "giftCodeChannel": {
-					"name": "- **Canal de codes cadeaux**",
-					"value": "  - Définir un canal où les codes cadeaux peuvent être soumis par n'importe qui pour un remboursement automatique"
-				}
+                    "name": "- **Canal de codes cadeaux**",
+                    "value": "  - Définir un canal où les codes cadeaux peuvent être soumis par n'importe qui pour un remboursement automatique"
+                }
             },
             "buttons": {
                 "addGiftCode": "Ajouter",
@@ -1627,7 +1636,7 @@
                     "value": "  - Changez la langue du bot lors de vos interactions."
                 },
                 "adminManagementField": {
-                    "name": "- **Gestion des admins**",
+                    "name": "- **admins**",
                     "value": "  - Gérer les admins du bot et leurs permissions."
                 },
                 "themeField": {
@@ -1635,32 +1644,37 @@
                     "value": "  - Personnaliser l'apparence des messages du bot avec différents thèmes."
                 },
                 "autoDeleteField": {
-                    "name": "- **Suppression automatique des joueurs inexistants**",
+                    "name": "- **Suppression automatique des joueurs supprimés**",
                     "value": "  - Supprimer automatiquement les joueurs qui n'existent plus après 3 vérifications.\n  - Statut actuel : **{autoDelete}**."
                 },
                 "mergeField": {
-                    "name": "- **Fusionner les données**",
+                    "name": "- **Fusionner**",
                     "value": "  - Fusionner les données de votre ancien bot Python avec cette nouvelle version pour conserver vos statistiques et votre historique."
                 },
                 "backupField": {
-                    "name": "- **Sauvegarder les données**",
+                    "name": "- **Sauvegarder**",
                     "value": "  - Créer et configurer des sauvegardes des données du bot via Google Drive."
                 },
                 "autoUpdateField": {
                     "name": "- **Mise à jour automatique**",
                     "value": "  - Vérifier et appliquer les mises à jour du bot directement depuis GitHub."
                 },
+                "featureAccessField": {
+                    "name": "- **Accès aux fonctionnalités**",
+                    "value": "  - Activer ou désactiver l'accès à certaines fonctionnalités du bot pour les utilisateurs normaux."
+                },
                 "disabled": "Désactivé",
                 "enabled": "Activé"
             },
             "buttons": {
                 "language": "Langue",
-                "adminManagement": "Admins",
+                "manageAdmins": "Gérer",
                 "autoDelete": "Suppression",
                 "theme": "Thèmes",
                 "merge": "Fusionner",
                 "backup": "Sauvegarder",
                 "autoUpdate": "Mise à jour",
+                "featureAccess": "Fonctionnalités",
                 "backToSettings": "Retour"
             },
             "errors": {}
@@ -1703,154 +1717,155 @@
             }
         },
         "adminManagement": {
-            "content": {
-                "title": "### {emoji.1027} Gestion des admins",
-                "description": "Gérez les admins du bot et leurs permissions.",
-                "addAdminField": {
-                    "name": "- **Ajouter un admin**",
-                    "value": "  - Promouvoir un utilisateur en admin"
+            "mainPage": {
+                "content": {
+                    "title": "### {emoji.1027} Gestion des admins",
+                    "description": "Gérez les admins du bot et leurs permissions.",
+                    "addAdminField": {
+                        "name": "- **Ajouter un admin**",
+                        "value": "  - Promouvoir un utilisateur en admin"
+                    },
+                    "removeAdminField": {
+                        "name": "- **Supprimer un admin**",
+                        "value": "  - Rétrograder un admin en utilisateur normal"
+                    },
+                    "assignPermissionsField": {
+                        "name": "- **Attribuer des permissions**",
+                        "value": "  - Modifier les permissions d'un admin"
+                    },
+                    "viewAdminsField": {
+                        "name": "- **Voir les admins**",
+                        "value": "  - Lister tous les admins actuels et leurs permissions"
+                    }
                 },
-                "removeAdminField": {
-                    "name": "- **Supprimer un admin**",
-                    "value": "  - Rétrograder un admin en utilisateur normal"
-                },
-                "assignPermissionsField": {
-                    "name": "- **Attribuer des permissions**",
-                    "value": "  - Modifier les permissions d'un admin"
-                },
-                "viewAdminsField": {
-                    "name": "- **Voir les admins**",
-                    "value": "  - Lister tous les admins actuels et leurs permissions"
+                "buttons": {
+                    "addAdmin": "Ajouter",
+                    "removeAdmin": "Supprimer",
+                    "assignPermissions": "Permissions",
+                    "viewAdmin": "Voir"
                 }
             },
-            "buttons": {
-                "manageAdmins": "Gérer",
-                "addAdmin": "Ajouter",
-                "removeAdmin": "Supprimer",
-                "assignPermissions": "Permissions",
-                "viewAdmin": "Voir"
-            }
-        },
-        "addAdmin": {
-            "content": {
-                "title": {
-                    "base": "### {emoji.1027} Sélectionner un utilisateur à promouvoir",
-                    "success": "### {emoji.1004} Administrateur ajouté avec succès"
+            "addAdmin": {
+                "content": {
+                    "title": {
+                        "base": "### {emoji.1027} Sélectionner un utilisateur à promouvoir",
+                        "success": "### {emoji.1004} Administrateur ajouté avec succès"
+                    },
+                    "description": {
+                        "base": "Sélectionnez un utilisateur dans le menu déroulant ci-dessous pour le promouvoir en administrateur.",
+                        "success": "{admin} a été promu administrateur."
+                    }
                 },
-                "description": {
-                    "base": "Sélectionnez un utilisateur dans le menu déroulant ci-dessous pour le promouvoir en administrateur.",
-                    "success": "{admin} a été promu administrateur."
+                "selectMenu": {
+                    "selectUser": {
+                        "placeholder": "Sélectionnez un utilisateur à promouvoir en administrateur"
+                    }
+                },
+                "errors": {
+                    "userAlreadyAdmin": "{emoji.1050} {selectedUser} est déjà administrateur."
                 }
             },
-            "selectMenu": {
-                "selectUser": {
-                    "placeholder": "Sélectionnez un utilisateur à promouvoir en administrateur"
+            "assignAdmin": {
+                "content": {
+                    "title": {
+                        "base": "### {emoji.1008} Sélectionner un administrateur à modifier",
+                        "edit": "### {emoji.1008} Modifier les permissions",
+                        "success": "### {emoji.1004} Permissions de l'administrateur mises à jour"
+                    },
+                    "description": {
+                        "base": "Sélectionnez un administrateur dans le menu déroulant ci-dessous pour modifier ses permissions.",
+                        "selectPermissions": "Sélectionnez les permissions pour **{admin}** à l'aide du menu déroulant ci-dessous.",
+                        "success": "Les permissions de **{admin}** ont été mises à jour avec succès."
+                    },
+                    "availablePermissionsField": {
+                        "name": "**Permissions disponibles**",
+                        "value": "{permissionsList}"
+                    },
+                    "updatedPermissionsField": {
+                        "name": "- **Permissions mises à jour**",
+                        "value": "{permissionsList}"
+                    },
+                    "noPermissions": "Aucune permission attribuée"
+                },
+                "selectMenu": {
+                    "adminSelect": {
+                        "placeholder": "Sélectionnez un administrateur pour modifier ses permissions"
+                    },
+                    "permissionSelect": {
+                        "placeholder": "Sélectionnez les permissions pour cet administrateur"
+                    }
+                },
+                "error": {
+                    "noAdmins": "{emoji.1050} Aucun administrateur trouvé.",
+                    "userNotAdmin": "{emoji.1050} L'utilisateur sélectionné n'est pas un administrateur."
                 }
             },
-            "errors": {
-                "userAlreadyAdmin": "{emoji.1050} {selectedUser} est déjà administrateur."
-            }
-        },
-        "assignAdmin": {
-            "content": {
-                "title": {
-                    "base": "### {emoji.1008} Sélectionner un administrateur à modifier",
-                    "edit": "### {emoji.1008} Modifier les permissions",
-                    "success": "### {emoji.1004} Permissions de l'administrateur mises à jour"
+            "removeAdmin": {
+                "content": {
+                    "title": {
+                        "base": "### {emoji.1051} Sélectionner un administrateur à rétrograder",
+                        "confirm": "### {emoji.1050} Confirmer la rétrogradation",
+                        "success": "### {emoji.1004} Administrateur retiré avec succès",
+                        "cancel": "### {emoji.1051} Rétrogradation annulée"
+                    },
+                    "description": {
+                        "base": "Sélectionnez un administrateur dans le menu déroulant ci-dessous pour le rétrograder en utilisateur normal.",
+                        "confirm": "Êtes-vous sûr de vouloir retirer les privilèges d'administrateur à **{admin}** ?",
+                        "success": "{admin} a été rétrogradé en utilisateur normal."
+                    }
                 },
-                "description": {
-                    "base": "Sélectionnez un administrateur dans le menu déroulant ci-dessous pour modifier ses permissions.",
-                    "selectPermissions": "Sélectionnez les permissions pour **{admin}** à l'aide du menu déroulant ci-dessous.",
-                    "success": "Les permissions de **{admin}** ont été mises à jour avec succès."
+                "buttons": {
+                    "confirm": "Confirmer la rétrogradation",
+                    "cancel": "Annuler"
                 },
-                "availablePermissionsField": {
-                    "name": "**Permissions disponibles**",
-                    "value": "{permissionsList}"
+                "selectMenu": {
+                    "adminSelect": {
+                        "placeholder": "Sélectionnez un administrateur à rétrograder"
+                    }
                 },
-                "updatedPermissionsField": {
-                    "name": "- **Permissions mises à jour**",
-                    "value": "{permissionsList}"
-                },
-                "noPermissions": "Aucune permission attribuée"
-            },
-            "selectMenu": {
-                "adminSelect": {
-                    "placeholder": "Sélectionnez un administrateur pour modifier ses permissions"
-                },
-                "permissionSelect": {
-                    "placeholder": "Sélectionnez les permissions pour cet administrateur"
+                "error": {
+                    "noAdmins": "{emoji.1050} Aucun administrateur trouvé.",
+                    "userNotAdmin": "{emoji.1050} L'utilisateur sélectionné n'est pas un administrateur."
                 }
             },
-            "error": {
-                "noAdmins": "{emoji.1050} Aucun administrateur trouvé.",
-                "userNotAdmin": "{emoji.1050} L'utilisateur sélectionné n'est pas un administrateur."
-            }
-        },
-        "removeAdmin": {
-            "content": {
-                "title": {
-                    "base": "### {emoji.1051} Sélectionner un administrateur à rétrograder",
-                    "confirm": "### {emoji.1050} Confirmer la rétrogradation",
-                    "success": "### {emoji.1004} Administrateur retiré avec succès",
-                    "cancel": "### {emoji.1051} Rétrogradation annulée"
+            "viewAdmins": {
+                "content": {
+                    "title": {
+                        "base": "### {emoji.1021} Voir les détails de l'administrateur",
+                        "selectedAdmin": "### {emoji.1026} Administrateur sélectionné",
+                        "fullLogs": "{emoji.1021} Logs complets de {user}"
+                    },
+                    "description": "Sélectionnez un administrateur dans le menu déroulant ci-dessous pour voir ses détails et son activité.",
+                    "adminInfoField": {
+                        "name": "- **Infos Admin**",
+                        "value": "  - Nom d'utilisateur: {username}\n  - ID utilisateur: {userId}"
+                    },
+                    "permissionsField": {
+                        "name": "- **Permissions**",
+                        "value": "{permissionsList}"
+                    },
+                    "recentActivityField": {
+                        "name": "- **Activité récente**",
+                        "value": "{activityList}"
+                    },
+                    "actionLogsField": {
+                        "name": "Logs d'action",
+                        "value": "{logsList}"
+                    },
+                    "noPermissions": "Aucune permission attribuée",
+                    "noRecentActivity": "Aucune activité récente trouvée.",
+                    "noLogsFound": "Aucun log trouvé."
                 },
-                "description": {
-                    "base": "Sélectionnez un administrateur dans le menu déroulant ci-dessous pour le rétrograder en utilisateur normal.",
-                    "confirm": "Êtes-vous sûr de vouloir retirer les privilèges d'administrateur à **{admin}** ?",
-                    "success": "{admin} a été rétrogradé en utilisateur normal."
+                "buttons": {
+                    "viewLogs": "Voir logs"
+                },
+                "selectMenu": {
+                    "placeholder": "Sélectionnez un administrateur à voir"
+                },
+                "error": {
+                    "noAdmins": "{emoji.1050} Aucun administrateur trouvé.",
+                    "userNotAdmin": "{emoji.1050} L'utilisateur sélectionné n'est pas un administrateur."
                 }
-            },
-            "buttons": {
-                "confirm": "Confirmer la rétrogradation",
-                "cancel": "Annuler"
-            },
-            "selectMenu": {
-                "adminSelect": {
-                    "placeholder": "Sélectionnez un administrateur à rétrograder"
-                }
-            },
-            "error": {
-                "noAdmins": "{emoji.1050} Aucun administrateur trouvé.",
-                "userNotAdmin": "{emoji.1050} L'utilisateur sélectionné n'est pas un administrateur."
-            }
-        },
-        "viewAdmins": {
-            "content": {
-                "title": {
-                    "base": "### {emoji.1021} Voir les détails de l'administrateur",
-                    "selectedAdmin": "### {emoji.1026} Administrateur sélectionné",
-                    "fullLogs": "{emoji.1021} Logs complets de {user}"
-                },
-                "description": "Sélectionnez un administrateur dans le menu déroulant ci-dessous pour voir ses détails et son activité.",
-                "adminInfoField": {
-                    "name": "- **Infos Admin**",
-                    "value": "  - Nom d'utilisateur: {username}\n  - ID utilisateur: {userId}"
-                },
-                "permissionsField": {
-                    "name": "- **Permissions**",
-                    "value": "{permissionsList}"
-                },
-                "recentActivityField": {
-                    "name": "- **Activité récente**",
-                    "value": "{activityList}"
-                },
-                "actionLogsField": {
-                    "name": "Logs d'action",
-                    "value": "{logsList}"
-                },
-                "noPermissions": "Aucune permission attribuée",
-                "noRecentActivity": "Aucune activité récente trouvée.",
-                "noLogsFound": "Aucun log trouvé."
-            },
-            "buttons": {
-                "viewLogs": "Voir logs"
-            },
-            "selectMenu": {
-                "placeholder": "Sélectionnez un administrateur à voir"
-            },
-            "error": {
-                "noAdmins": "{emoji.1050} Aucun administrateur trouvé.",
-                "userNotAdmin": "{emoji.1050} L'utilisateur sélectionné n'est pas un administrateur."
             }
         },
         "migration": {
@@ -2358,6 +2373,64 @@
                     "reloadFailed": "{emoji.1050} Échec du rechargement du pack par défaut. Veuillez réessayer."
                 }
             }
+        },
+        "featureAccess": {
+            "content": {
+                "title": {
+                    "base": "### {emoji.1011} Contrôle d'accès aux fonctionnalités",
+                    "selectAccess": "### {emoji.1011} Définir l'accès pour {featureName}",
+                    "ChannelSelect": "### {emoji.1014} Sélectionner les canaux",
+                    "whitelistedChannels": "### {emoji.1014} Canaux autorisés",
+                    "confirmation": "### {emoji.1050} Confirmer la modification d'accès"
+                },
+                "description": {
+                    "base": "Contrôlez l'accès à des fonctionnalités spécifiques du bot en les restreignant aux admins uniquement, à un canal spécifique, ou en les désactivant complètement.",
+                    "selectAccess": "- Tous les utilisateurs\n  - Tous les utilisateurs peuvent accéder à la fonctionnalité\n- Admins uniquement\n  - Seuls les utilisateurs avec les permissions d'admin peuvent accéder à la fonctionnalité\n- Canal spécifique\n  - Sera restreint à des canaux spécifiques (peut être défini via le bouton canaux autorisés)\n- Désactiver\n  - La fonctionnalité sera désactivée et inaccessible à tous les utilisateurs sauf au propriétaire du bot",
+                    "chooseChannelsToAdd": "Sélectionnez les canaux à ajouter à la liste blanche",
+                    "chooseChannelsToRemove": "Sélectionnez les canaux à supprimer de la liste blanche",
+                    "channelsRemoved": "Les canaux suivants ont été supprimés de la liste blanche :\n{channelsList}",
+                    "channelsAdded": "Les canaux suivants ont été ajoutés à la liste blanche :\n{channelsList}",
+                    "chooseAction": "- Choisissez une action pour les canaux autorisés :\n  - Ajouter : Ajouter d'autres canaux à la liste blanche\n  - Supprimer : Supprimer des canaux de la liste blanche",
+                    "everyone": "Changer l'accès aux notifications privées à **Tous les utilisateurs** permettra à tous les utilisateurs de créer des notifications privées.",
+                    "admins": "Changer l'accès aux notifications privées à **Admins uniquement** va :\n- Désactiver toutes les notifications privées existantes créées par les utilisateurs non-admin\n- Seul le propriétaire et les admins enregistrés pourront créer de nouvelles notifications privées",
+                    "channel": "Changer l'accès aux notifications privées à **Canal spécifique** va :\n- Désactiver toutes les notifications privées existantes créées par les utilisateurs non-propriétaires\n- Seul le propriétaire pourra créer des notifications privées\n\n**Remarque :** Ce paramètre ne s'applique pas aux notifications privées (DMs) car elles n'ont pas de contexte de canal.",
+                    "disable": "Changer l'accès aux notifications privées à **Désactiver** va :\n- Désactiver toutes les notifications privées existantes créées par les utilisateurs non-propriétaires\n- Seul le propriétaire pourra gérer les notifications"
+                },
+                "affectedNotifications": "\n**{count} notification(s) seront désactivée(s).**",
+                "noAffectedNotifications": "\nAucune notification ne sera affectée.",
+                "changeApplied": "Accès modifié avec succès.\n{affectedInfo}",
+                "notificationsDeactivated": "{count} notification(s) privée(s) ont été désactivée(s).",
+                "noNotificationsDeactivated": "Aucune notification n'a été désactivée.",
+                "updated": "Accès aux fonctionnalités mis à jour !",
+                "privateNotifications": "notifications privées",
+                "calculators": "calculatrices"
+            },
+            "buttons": {
+                "privateNotifications": "Notifications privées",
+                "calculators": "Calculatrices",
+                "whitelistChannels": "Canaux autorisés",
+                "everyone": "Tous les utilisateurs",
+                "admins": "Admins uniquement",
+                "channel": "Canal spécifique",
+                "disable": "Désactiver la fonctionnalité",
+                "add": "Ajouter",
+                "remove": "Supprimer",
+                "confirm": "Confirmer et désactiver",
+                "cancel": "Annuler"
+            },
+            "selectmenu": {
+                "channelAdd": {
+                    "placeholder": "Sélectionnez un canal à ajouter à la liste blanche"
+                },
+                "channelRemove": {
+                    "placeholder": "Sélectionnez un canal à supprimer de la liste blanche"
+                }
+            },
+            "errors": {
+                "noWhitelistedChannels": "Aucun canal autorisé trouvé pour ce serveur. Veuillez ajouter des canaux à la liste blanche.",
+                "notServer": "{emoji.1050} Cette fonctionnalité n'est disponible que lors de l'exécution sur un serveur.",
+                "alreadyExisits": "{emoji.1050} Le canal sélectionné est déjà dans la liste blanche."
+            }
         }
     },
     "support": {
@@ -2365,6 +2438,129 @@
             "content": {
                 "title": "### {emoji.1039} Support",
                 "description": "Si vous avez besoin d'aide pour le bot ou rencontrez des problèmes, n'hésitez pas à demander sur notre [Discord](https://discord.gg/A7ZVTFd4p9).\nPour un soutien émotionnel ou financier, vous pouvez m'offrir un café ici : [Buy Me A Coffee](https://buymeacoffee.com/wosland) {emoji.1039}"
+            }
+        }
+    },
+    "calculators": {
+        "mainPage": {
+            "content": {
+                "title": "### {emoji.1041} Calculatrices",
+                "BuildingsField": {
+                    "name": "- **Calculatrice de bâtiments**",
+                    "value": "  - Calcule les coûts et le temps nécessaires pour améliorer vos bâtiments."
+                }
+            },
+            "buttons": {
+                "buildings": "Bâtiments"
+            },
+            "errors": {}
+        },
+        "buildings": {
+            "content": {
+                "title": "### {emoji.1041} Calculatrice de bâtiments",
+                "buildings": {
+                    "barricade": "Barricade",
+                    "marksmanCamp": "Camp de tireurs d'élite",
+                    "lancerCamp": "Camp de lanciers",
+                    "infantryCamp": "Camp d'infanterie",
+                    "researchCenter": "Centre de recherche",
+                    "infirmary": "Infirmerie",
+                    "commandCenter": "Centre de commandement",
+                    "embassy": "Ambassade",
+                    "storehouse": "Entrepôt",
+                    "furnace": "Fournaise",
+                    "warAcademy": "Académie de guerre"
+                },
+                "resources": {
+                    "meat": "Viande",
+                    "wood": "Bois",
+                    "iron": "Fer",
+                    "coal": "Charbon",
+                    "fireCrystal": "Cristal de feu",
+                    "refinedFireCrystal": "Cristal de feu raffiné"
+                }
+            },
+            "types": {
+                "basic": "Basique",
+                "fireCrystal": "Cristal de feu"
+            },
+            "levelDisplay": "Niveau {key}",
+            "header": {
+                "typeSelection": "### Calculatrice d'amélioration de bâtiment\nSélectionnez la catégorie de bâtiment :",
+                "controls": "### Bâtiments {type}",
+                "from": "**Depuis :** {level}",
+                "selected": "**Bâtiment :** {name}"
+            },
+            "buttons": {
+                "basic": "Bâtiments basiques",
+                "fireCrystal": "Bâtiments FC",
+                "buffs": "Bonus",
+                "back": "Retour",
+                "prev": "Précédent",
+                "next": "Suivant",
+                "copy": "Copier"
+            },
+            "placeholders": {
+                "selectBuilding": "Sélectionnez un bâtiment",
+                "selectStartingLevel": "Sélectionnez le niveau de départ",
+                "selectTargetLevel": "Sélectionnez le niveau cible"
+            },
+            "modal": {
+                "title": "Bonus du calculateur",
+                "vpDoubleTime": {
+                    "label": "Bonus VP / Double Time",
+                    "placeholder": "Sélectionnez VP / Double Time",
+                    "off": "Désactivé",
+                    "vp10": "VP 10%",
+                    "vp15": "VP 15%",
+                    "doubleTime": "Double Time (+20%)",
+                    "vp10dt": "VP 10% + Double Time (+30%)",
+                    "vp15dt": "VP 15% + Double Time (+35%)"
+                },
+                "pet": {
+                    "label": "Familier Hyène des cavernes (vitesse de construction)",
+                    "placeholder": "Sélectionnez le niveau du familier",
+                    "off": "Désactivé",
+                    "level": "Niveau {n} (+{pct}% vitesse)"
+                },
+                "zinman": {
+                    "label": "Zinman (réduction de ressources)",
+                    "placeholder": "Sélectionnez le niveau de Zinman",
+                    "off": "Désactivé",
+                    "level": "Niveau {n} ({pct}% réduction de ressources)"
+                },
+                "expert": {
+                    "label": "Expert (réduction de temps fixe)",
+                    "placeholder": "Sélectionnez le niveau d'Expert",
+                    "off": "Désactivé",
+                    "level": "Niveau {n} (-{time} par amélioration)"
+                },
+                "speed": {
+                    "label": "Vitesse de construction %",
+                    "description": "Bonus manuel de vitesse de construction (ex. 150 pour 150%)",
+                    "placeholder": "ex. 150"
+                }
+            },
+            "results": {
+                "upgradePlan": "### Plan d'amélioration",
+                "resourcesRequired": "- **Ressources requises :**",
+                "buildTime": "- **Temps de construction :**",
+                "original": "  - Original : **{time}**",
+                "withBuffs": "  - Avec bonus : **{time}**",
+                "requirements": "- **Prérequis :**",
+                "requirementLevel": "Niveau {level}",
+                "buffsLine": "- **Bonus appliqués**\n  - {parts}",
+                "buffs": {
+                    "constructionSpeed": "Vitesse de construction : {pct}%",
+                    "pet": "Familier Nv.{n} (+{pct}% vitesse)",
+                    "zinman": "Zinman Nv.{n} ({pct}% réduction de ressources)",
+                    "expert": "Expert Nv.{n} (-{time}/amélioration x {levels})"
+                }
+            },
+            "errors": {
+                "calcFailed": "{emoji.1050} Impossible de calculer le coût d'amélioration. Vérifiez vos sélections de niveaux.",
+                "noSummary": "Impossible de générer le résumé.",
+                "dmSent": "Résumé envoyé en message privé !"
             }
         }
     },

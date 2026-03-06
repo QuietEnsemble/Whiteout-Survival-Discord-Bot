@@ -1,7 +1,7 @@
-const { adminQueries, systemLogQueries } = require('./database');
+const { adminQueries, userQueries, systemLogQueries, settingsQueries } = require('./database');
 const { SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const languages = require('../../i18n');
-const { getEmojiMapForAdmin, wrapLangWithEmojis, getComponentEmoji } = require('./emojis');
+const { getEmojiMapForUser, wrapLangWithEmojis, getComponentEmoji } = require('./emojis');
 const path = require('path');
 
 // Detect project root (where package.json is located)
@@ -12,13 +12,14 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../');
  * The lang object automatically replaces {emoji.XXX} placeholders.
  * { adminData, userLang, lang }
  */
-function getAdminLang(userId) {
+function getUserInfo(userId) {
     const adminData = adminQueries.getAdmin(userId);
-    const userLang = adminData?.language || 'en';
+    const userData = userQueries.getUser(userId);
+    const userLang = userData?.language || 'en';
     const baseLang = languages[userLang] || languages['en'];
-    const emojiMap = getEmojiMapForAdmin(userId);
+    const emojiMap = getEmojiMapForUser(userId);
     const lang = wrapLangWithEmojis(baseLang, emojiMap);
-    return { adminData, userLang, lang };
+    return { adminData, userData, userLang, lang };
 }
 
 /**
@@ -102,7 +103,7 @@ function shouldIgnoreError(error) {
 /**
  * Centralized error handler: logs to system log and attempts to reply/followUp with localized error.
  */
-async function sendError(interaction, lang, error, functionName = '', shouldReply = true) {
+async function handleError(interaction, lang, error, functionName = '', shouldReply = true) {
     try {
         // Silently ignore expected errors (Unknown Channel, Unknown User, etc.)
         if (shouldIgnoreError(error)) {
@@ -161,7 +162,7 @@ async function sendError(interaction, lang, error, functionName = '', shouldRepl
     } catch (responseError) {
         // Log response error to console as well
         console.error('\n' + '!'.repeat(80));
-        console.error(`[CRITICAL] Error in sendError function - ${new Date().toISOString()}`);
+        console.error(`[CRITICAL] Error in handleError function - ${new Date().toISOString()}`);
         console.error('!'.repeat(80));
         console.error(`Original Error: ${error?.message || 'Unknown'}`);
         console.error(`Response Error: ${responseError.message}`);
@@ -169,7 +170,7 @@ async function sendError(interaction, lang, error, functionName = '', shouldRepl
         console.error('!'.repeat(80) + '\n');
 
         try {
-            systemLogQueries.addLog('error', `Error sending error response: ${responseError.message}`, JSON.stringify({ user_id: interaction?.user?.id, original_error: error?.message, response_error: responseError.message, function: 'sendError' }));
+            systemLogQueries.addLog('error', `Error sending error response: ${responseError.message}`, JSON.stringify({ user_id: interaction?.user?.id, original_error: error?.message, response_error: responseError.message, function: 'handleError' }));
         } catch (logErr) { /* swallow */ }
     }
 }
@@ -285,7 +286,7 @@ function createAllianceSelectionComponents(options) {
     const defaultMapper = (alliance) => ({
         label: alliance.name,
         value: alliance.id.toString(),
-        emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001')
+        emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001')
     });
     const mapperFn = optionMapper || defaultMapper;
     const selectOptions = currentPageAlliances.map(mapperFn);
@@ -568,9 +569,9 @@ function checkCustomIdLength(customId, maxLength = 100) {
 }
 
 module.exports = {
-    getAdminLang,
+    getUserInfo,
     assertUserMatches,
-    sendError,
+    handleError,
     shouldIgnoreError,
     hasPermission,
     updateComponentsV2AfterSeparator,

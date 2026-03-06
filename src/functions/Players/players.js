@@ -7,8 +7,8 @@ const { createRemovePlayersButton } = require('./removePlayers');
 const { createViewPlayersButton } = require('./viewPlayers');
 const { createIdChannelButton } = require('./idChannel');
 const { createExportButton } = require('./export');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 
 
 /**
@@ -22,7 +22,7 @@ function createPlayerManagementButton(userId, lang = {}) {
         .setCustomId(`player_management_${userId}`)
         .setLabel(lang.panel.mainPage.buttons.players)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1027'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1027'));
 }
 
 /**
@@ -31,7 +31,7 @@ function createPlayerManagementButton(userId, lang = {}) {
  */
 async function handlePlayerManagementButton(interaction) {
     // Get user's language preference
-    const { lang, adminData } = getAdminLang(interaction.user.id);
+    const { lang, adminData } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // player_management_userId
@@ -104,7 +104,7 @@ async function handlePlayerManagementButton(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handlePlayerManagementButton');
+        await handleError(interaction, lang, error, 'handlePlayerManagementButton');
     }
 }
 

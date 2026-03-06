@@ -12,8 +12,8 @@ const {
 const { adminQueries, allianceQueries } = require('../utility/database');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');;
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 const { adminUsernameCache } = require('../utility/adminUsernameCache');
 
 
@@ -28,7 +28,7 @@ function createAssignAllianceButton(userId, lang) {
         .setCustomId(`assign_alliance_${userId}`)
         .setLabel(lang.alliance.mainPage.buttons.assignAlliance)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1020'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1020'));
 }
 
 /**
@@ -37,7 +37,7 @@ function createAssignAllianceButton(userId, lang) {
  */
 async function handleAssignAllianceButton(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const expectedUserId = interaction.customId.split('_')[2]; // assign_alliance_userId
 
@@ -74,7 +74,7 @@ async function handleAssignAllianceButton(interaction) {
         await showAdminSelection(interaction, 0, lang, eligibleAdmins);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAssignAllianceButton');
+        await handleError(interaction, lang, error, 'handleAssignAllianceButton');
     }
 }
 
@@ -182,7 +182,7 @@ async function showAdminSelection(interaction, page = 0, lang = {}, eligibleAdmi
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleAssignAdminSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const expectedUserId = interaction.customId.split('_')[3]; // select_assign_admin_userId_page
 
@@ -224,7 +224,7 @@ async function handleAssignAdminSelection(interaction) {
         await showAllianceSelection(interaction, 0, lang, selectedAdminUserId, allAlliances);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAssignAdminSelection');
+        await handleError(interaction, lang, error, 'handleAssignAdminSelection');
     }
 }
 
@@ -237,7 +237,7 @@ async function handleAssignAdminSelection(interaction) {
  * @param {Array} allAlliances - Array of all alliances
  */
 async function showAllianceSelection(interaction, page = 0, lang = {}, selectedAdminUserId, allAlliances = null) {
-    const emojiMap = getEmojiMapForAdmin(interaction.user.id);
+    const emojiMap = getEmojiMapForUser(interaction.user.id);
     // If allAlliances not provided, get them
     if (!allAlliances) {
         allAlliances = allianceQueries.getAllAlliances();
@@ -338,7 +338,7 @@ async function showAllianceSelection(interaction, page = 0, lang = {}, selectedA
  * @param {import('discord.js').StringSelectMenuInteraction} interaction
  */
 async function handleAssignAlliancesSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID, target admin user ID, and page from custom ID
         const customIdParts = interaction.customId.split('_');
@@ -462,7 +462,7 @@ async function handleAssignAlliancesSelection(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAssignAlliancesSelection');
+        await handleError(interaction, lang, error, 'handleAssignAlliancesSelection');
     }
 }
 
@@ -471,7 +471,7 @@ async function handleAssignAlliancesSelection(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleAssignAdminPagination(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const { userId, newPage } = parsePaginationCustomId(interaction.customId, 0);
 
@@ -485,7 +485,7 @@ async function handleAssignAdminPagination(interaction) {
         await showAdminSelection(interaction, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAssignAdminPagination');
+        await handleError(interaction, lang, error, 'handleAssignAdminPagination');
     }
 }
 
@@ -494,7 +494,7 @@ async function handleAssignAdminPagination(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleAssignAlliancesPagination(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const { userId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 1);
         const selectedAdminUserId = contextData[0];
@@ -506,7 +506,7 @@ async function handleAssignAlliancesPagination(interaction) {
         await showAllianceSelection(interaction, newPage, lang, selectedAdminUserId);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAssignAlliancesPagination');
+        await handleError(interaction, lang, error, 'handleAssignAlliancesPagination');
     }
 }
 

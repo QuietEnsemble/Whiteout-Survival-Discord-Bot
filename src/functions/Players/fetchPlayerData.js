@@ -1,10 +1,9 @@
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const { getProcessById, updateProcessStatus, updateProcessProgress } = require('../Processes/createProcesses');
-const { queueManager } = require('../Processes/queueManager');
-const { adminQueries, allianceQueries, playerQueries, systemLogQueries } = require('../utility/database');
+const { allianceQueries, playerQueries } = require('../utility/database');
 const languages = require('../../i18n');
-const { sendError, getAdminLang } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji, getGlobalEmojiMap } = require('../utility/emojis');
+const { handleError, getUserInfo } = require('../utility/commonFunctions');
+const { getComponentEmoji, getGlobalEmojiMap } = require('../utility/emojis');
 const { API_CONFIG } = require('../utility/apiConfig');
 const { fetchPlayerData: fetchPlayerFromAPIShared } = require('../utility/apiClient');
 
@@ -35,7 +34,7 @@ class PlayerDataProcessor {
         }
 
         // Get admin language for messages
-        const { lang } = getAdminLang(processData.created_by);
+        const { lang } = getUserInfo(processData.created_by);
         try {
             // Get bot client for sending messages
             const { client } = require('../../index'); // Get client from main file
@@ -136,7 +135,7 @@ class PlayerDataProcessor {
             await this.completeProcess(processId, processData, alliance, lang);
 
         } catch (error) {
-            await sendError(null, lang, error, 'processPlayerData', false);
+            await handleError(null, lang, error, 'processPlayerData', false);
 
             // If it's not a rate limit error, mark as failed
             if (!this.isRateLimitError(error)) {
@@ -190,7 +189,7 @@ class PlayerDataProcessor {
 
 
         } catch (error) {
-            await sendError(null, null, error, 'filterExistingPlayers', false);
+            await handleError(null, null, error, 'filterExistingPlayers', false);
             throw error;
         }
     }
@@ -323,7 +322,7 @@ class PlayerDataProcessor {
                     }
 
                 } catch (error) {
-                    await sendError(null, lang, error, 'fetchAndProcessPlayers', false);
+                    await handleError(null, lang, error, 'fetchAndProcessPlayers', false);
 
                     // Move to failed for non-rate-limit errors
                     if (!this.isRateLimitError(error)) {
@@ -337,7 +336,7 @@ class PlayerDataProcessor {
             return 'COMPLETED'; // Return completion status
 
         } catch (error) {
-            await sendError(null, lang, error, 'fetchAndProcessPlayers', false);
+            await handleError(null, lang, error, 'fetchAndProcessPlayers', false);
             throw error;
         }
     }
@@ -349,7 +348,7 @@ class PlayerDataProcessor {
      */
     async fetchPlayerFromAPI(playerId) {
         return fetchPlayerFromAPIShared(playerId, {
-            onError: (error, context) => sendError(null, null, error, context, false),
+            onError: (error, context) => handleError(null, null, error, context, false),
             delay: (ms) => this.delay(ms),
             returnErrorObject: false
         });
@@ -377,7 +376,7 @@ class PlayerDataProcessor {
             );
 
         } catch (error) {
-            await sendError(null, null, error, 'addPlayerToDatabase', false);
+            await handleError(null, null, error, 'addPlayerToDatabase', false);
             throw error;
         }
     }
@@ -411,7 +410,7 @@ class PlayerDataProcessor {
             await updateProcessProgress(processId, progress);
 
         } catch (error) {
-            await sendError(null, null, error, 'movePlayerToStatus', false);
+            await handleError(null, null, error, 'movePlayerToStatus', false);
             throw error;
         }
     }
@@ -449,7 +448,7 @@ class PlayerDataProcessor {
             }
             await this.delay(API_CONFIG.RATE_LIMIT_DELAY);
         } catch (error) {
-            await sendError(null, lang, error, 'handleRateLimit', false);
+            await handleError(null, lang, error, 'handleRateLimit', false);
             throw error;
         }
     }
@@ -517,7 +516,7 @@ class PlayerDataProcessor {
             this.processing.delete(processId);
 
         } catch (error) {
-            await sendError(null, lang, error, 'completeProcess', false);
+            await handleError(null, lang, error, 'completeProcess', false);
             throw error;
         }
     }
@@ -661,7 +660,7 @@ class PlayerDataProcessor {
             await originalMessage.reply({ embeds: [embed] });
 
         } catch (error) {
-            await sendError(null, lang, error, 'handleAddPlayerButton', false);
+            await handleError(null, lang, error, 'handleAddPlayerButton', false);
         }
     }
 
@@ -701,7 +700,7 @@ class PlayerDataProcessor {
             });
 
         } catch (error) {
-            await sendError(null, lang, error, 'updateProgressEmbed', false);
+            await handleError(null, lang, error, 'updateProgressEmbed', false);
         }
     }
 
@@ -803,9 +802,8 @@ async function handleViewFailedPlayersButton(interaction) {
             });
         }
 
-        // Get admin language
-        const adminData = adminQueries.getAdmin(interaction.user.id);
-        const userLang = (adminData && adminData.language) ? adminData.language : 'en';
+        // Get user language
+        const { userLang } = getUserInfo(interaction.user.id);
         const lang = languages[userLang] || languages['en'] || {};
 
         const failedIds = processData.progress?.failed || [];

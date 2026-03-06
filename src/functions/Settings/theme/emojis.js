@@ -9,8 +9,8 @@ const {
 	SeparatorSpacingSize
 } = require('discord.js');
 const { createBackToSettingsButton } = require('../backToSettings');
-const { getAdminLang, assertUserMatches, sendError, hasPermission } = require('../../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../../utility/emojis');
 const { createEmojiCreateButton } = require('./emojisCreate');
 const { createEmojiEditButton } = require('./emojisEdit');
 const { createEmojiViewButton } = require('./emojisView');
@@ -32,7 +32,7 @@ function createEmojiThemeButton(userId, lang = {}) {
 		.setCustomId(`emoji_theme_${userId}`)
 		.setLabel(lang.settings.mainPage.buttons.theme)
 		.setStyle(ButtonStyle.Secondary)
-		.setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1039'));
+		.setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1039'));
 }
 
 /**
@@ -118,7 +118,7 @@ function createEmojiThemeContainer(userId, lang, adminData) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleEmojiThemeButton(interaction) {
-	const { adminData, lang } = getAdminLang(interaction.user.id);
+	const { adminData, lang } = getUserInfo(interaction.user.id);
 	try {
 		const expectedUserId = interaction.customId.split('_')[2];
 		if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -137,7 +137,7 @@ async function handleEmojiThemeButton(interaction) {
 			flags: MessageFlags.IsComponentsV2
 		});
 	} catch (error) {
-		await sendError(interaction, lang, error, 'handleEmojiThemeButton');
+		await handleError(interaction, lang, error, 'handleEmojiThemeButton');
 	}
 }
 

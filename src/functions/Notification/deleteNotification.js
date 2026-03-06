@@ -14,8 +14,9 @@ const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { notificationScheduler } = require('./notificationScheduler');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
-const { getAdminLang, assertUserMatches, sendError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
+const { checkFeatureAccess } = require('../utility/checkAccess');
 const ITEMS_PER_PAGE = 20;
 
 /**
@@ -26,23 +27,24 @@ function createDeleteNotificationButton(userId, lang) {
         .setCustomId(`notification_delete_${userId}`)
         .setLabel(lang.notification.deleteNotification.buttons.deleteNotification)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1046'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
 
 /**
  * Handle delete notification button click - show type selection
  */
 async function handleDeleteNotificationButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[2];
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        // Check permissions
+        // Check permissions - allow if user has server notification access OR private notification feature
         const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
 
-        if (!hasAccess) {
+        if (!hasAccess && !hasPrivateFeature) {
             return await interaction.reply({
                 content: lang.common.noPermission,
                 ephemeral: true
@@ -53,7 +55,7 @@ async function handleDeleteNotificationButton(interaction) {
         await showTypeSelection(interaction, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteNotificationButton');
+        await handleError(interaction, lang, error, 'handleDeleteNotificationButton');
     }
 }
 
@@ -61,17 +63,23 @@ async function handleDeleteNotificationButton(interaction) {
  * Show notification type selection (server or private)
  */
 async function showTypeSelection(interaction, lang) {
+    const { adminData } = getUserInfo(interaction.user.id);
+    const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+    const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
     const serverButton = new ButtonBuilder()
         .setCustomId(`notification_delete_type_server_${interaction.user.id}`)
         .setLabel(lang.notification.deleteNotification.buttons.serverNotifications)
         .setStyle(ButtonStyle.Primary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022'))
+        .setDisabled(!hasAccess);
 
     const privateButton = new ButtonBuilder()
         .setCustomId(`notification_delete_type_private_${interaction.user.id}`)
         .setLabel(lang.notification.deleteNotification.buttons.privateNotifications)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1029'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1029'))
+        .setDisabled(!hasPrivateFeature);
 
     const buttonRow = new ActionRowBuilder().addComponents(serverButton, privateButton);
 
@@ -100,11 +108,22 @@ async function showTypeSelection(interaction, lang) {
  * Handle type selection button (server or private)
  */
 async function handleTypeSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const [, , , type, userId] = interaction.customId.split('_');
         if (!(await assertUserMatches(interaction, userId, lang))) return;
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+        if (type === 'server' && !hasAccess) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
 
         // Get filtered notifications
         const notifications = getFilteredNotifications(type, interaction.guild?.id, interaction.user.id, adminData);
@@ -132,7 +151,7 @@ async function handleTypeSelection(interaction) {
         await showNotificationSelection(interaction, notifications, 1, type, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleTypeSelection');
+        await handleError(interaction, lang, error, 'handleTypeSelection');
     }
 }
 
@@ -164,7 +183,7 @@ async function showNotificationSelection(interaction, notifications, page, type,
             label: notification.name.substring(0, 100),
             value: `notification_${notification.id}`,
             description: description.substring(0, 100),
-            emoji: notification.is_active ? getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1022') : getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1052')
+            emoji: notification.is_active ? getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1022') : getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1052')
         };
     }));
 
@@ -221,11 +240,22 @@ async function showNotificationSelection(interaction, notifications, page, type,
  * Handle pagination button clicks
  */
 async function handleDeleteNotificationPagination(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const { userId, newPage, subtype } = parsePaginationCustomId(interaction.customId, 0);
         if (!(await assertUserMatches(interaction, userId, lang))) return;
+
+        // Re-check permissions at interaction time (components don't expire)
+        const hasAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+        if (subtype === 'server' && !hasAccess) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (subtype === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
 
         // Get filtered notifications
         const notifications = getFilteredNotifications(subtype, interaction.guild?.id, interaction.user.id, adminData);
@@ -233,7 +263,7 @@ async function handleDeleteNotificationPagination(interaction) {
         await showNotificationSelection(interaction, notifications, newPage, subtype, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteNotificationPagination');
+        await handleError(interaction, lang, error, 'handleDeleteNotificationPagination');
     }
 }
 
@@ -241,7 +271,7 @@ async function handleDeleteNotificationPagination(interaction) {
  * Handle notification selection from dropdown
  */
 async function handleNotificationSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -261,20 +291,22 @@ async function handleNotificationSelection(interaction) {
             });
         }
 
-        // Check if user has permission to delete this notification
-        const hasFullAccess = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
-        if (!hasFullAccess && notification.created_by !== interaction.user.id) {
-            return await interaction.reply({
-                content: lang.common.noPermission,
-                ephemeral: true
-            });
+        // Re-check permissions at interaction time based on notification type
+        const hasServerPermission = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermission) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         // Show confirmation
         await showDeleteConfirmation(interaction, notification, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleNotificationSelection');
+        await handleError(interaction, lang, error, 'handleNotificationSelection');
     }
 }
 
@@ -282,7 +314,7 @@ async function handleNotificationSelection(interaction) {
  * Show delete confirmation with notification details
  */
 async function showDeleteConfirmation(interaction, notification, lang) {
-    const typeDisplay = notification.guild_id
+    const typeDisplay = notification.type === 'server'
         ? lang.notification.deleteNotification.content.typeServer
         : lang.notification.deleteNotification.content.typePrivate;
 
@@ -304,13 +336,13 @@ async function showDeleteConfirmation(interaction, notification, lang) {
         .setCustomId(`notification_delete_confirm_${notification.id}_${interaction.user.id}`)
         .setLabel(lang.notification.deleteNotification.buttons.confirm)
         .setStyle(ButtonStyle.Danger)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004'));
 
     const cancelButton = new ButtonBuilder()
         .setCustomId(`notification_delete_cancel_${interaction.user.id}`)
         .setLabel(lang.notification.deleteNotification.buttons.cancel)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'));
 
     const buttonRow = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
 
@@ -346,7 +378,7 @@ async function showDeleteConfirmation(interaction, notification, lang) {
  * Handle delete confirmation button
  */
 async function handleDeleteConfirm(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         const [, , , notificationId, userId] = interaction.customId.split('_');
@@ -361,6 +393,17 @@ async function handleDeleteConfirm(interaction) {
                 content: lang.notification.deleteNotification.errors.notificationNotFound,
                 ephemeral: true
             });
+        }
+
+        // Re-check permissions at delete time (components don't expire)
+        const hasServerPermission = hasPermission(adminData, PERMISSIONS.FULL_ACCESS, PERMISSIONS.NOTIFICATIONS_MANAGEMENT);
+        const hasPrivateFeature = checkFeatureAccess('privateNotifications', interaction);
+
+        if (notification.type === 'server' && !hasServerPermission) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
+        }
+        if (notification.type === 'private' && !hasPrivateFeature) {
+            return await interaction.reply({ content: lang.common.noPermission, ephemeral: true });
         }
 
         // First, remove from scheduler
@@ -399,7 +442,7 @@ async function handleDeleteConfirm(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteConfirm');
+        await handleError(interaction, lang, error, 'handleDeleteConfirm');
     }
 }
 
@@ -407,7 +450,7 @@ async function handleDeleteConfirm(interaction) {
  * Handle delete cancel button
  */
 async function handleDeleteCancel(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const expectedUserId = interaction.customId.split('_')[3];
@@ -433,7 +476,7 @@ async function handleDeleteCancel(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleDeleteCancel');
+        await handleError(interaction, lang, error, 'handleDeleteCancel');
     }
 }
 

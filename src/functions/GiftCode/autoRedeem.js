@@ -2,8 +2,8 @@ const { ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags, TextDisplayB
 const { allianceQueries } = require('../utility/database');
 const { parsePaginationCustomId, createUniversalPaginationButtons } = require('../Pagination/universalPagination');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 /**
  * Creates a toggle auto-redeem button
@@ -16,7 +16,7 @@ function createToggleAutoRedeemButton(userId, lang = {}) {
         .setCustomId(`toggle_auto_redeem_${userId}`)
         .setLabel(lang.giftCode.autoRedeem.buttons.toggleAutoRedeem)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033')); // refresh/shuffle emoji
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033')); // refresh/shuffle emoji
 }
 
 /**
@@ -26,7 +26,7 @@ function createToggleAutoRedeemButton(userId, lang = {}) {
  */
 async function handleToggleAutoRedeemButton(interaction) {
     // Get language preference first (needed for all messages including errors)
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract user ID from custom ID for security check
@@ -60,7 +60,7 @@ async function handleToggleAutoRedeemButton(interaction) {
         await displayToggleAutoRedeemPage(interaction, allAlliances, 0, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleToggleAutoRedeemButton');
+        await handleError(interaction, lang, error, 'handleToggleAutoRedeemButton');
     }
 }
 
@@ -98,7 +98,7 @@ async function displayToggleAutoRedeemPage(interaction, allAlliances, page, lang
         label: alliance.name,
         description: lang.giftCode.autoRedeem.selectMenu.selectAlliances.description.replace('{priority}', alliance.priority).replace('{autoRedeemStatus}', alliance.auto_redeem ? lang.giftCode.autoRedeem.selectMenu.selectAlliances.enabled : lang.giftCode.autoRedeem.selectMenu.selectAlliances.disabled),
         value: alliance.id.toString(),
-        emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001') // shield emoji
+        emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001') // shield emoji
     });
 
     const selectOptions = currentPageAlliances.map(optionMapper);
@@ -161,7 +161,7 @@ async function displayToggleAutoRedeemPage(interaction, allAlliances, page, lang
  */
 async function handleToggleAutoRedeemPagination(interaction) {
     // Get language preference first 
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
 
         // Parse pagination data from custom ID
@@ -198,7 +198,7 @@ async function handleToggleAutoRedeemPagination(interaction) {
         await displayToggleAutoRedeemPage(interaction, allAlliances, newPage, lang);
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleToggleAutoRedeemPagination');
+        await handleError(interaction, lang, error, 'handleToggleAutoRedeemPagination');
     }
 }
 
@@ -209,7 +209,7 @@ async function handleToggleAutoRedeemPagination(interaction) {
  */
 async function handleToggleAutoRedeemSelect(interaction) {
     // Get language preference first
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
 
     try {
         // Extract user ID from custom ID for security check
@@ -289,7 +289,7 @@ async function handleToggleAutoRedeemSelect(interaction) {
         });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleToggleAutoRedeemSelect');
+        await handleError(interaction, lang, error, 'handleToggleAutoRedeemSelect');
     }
 }
 

@@ -11,14 +11,15 @@ const {
     TextDisplayBuilder,
     SeparatorBuilder,
     SeparatorSpacingSize,
-    LabelBuilder
+    LabelBuilder,
+    SectionBuilder
 } = require('discord.js');
 const { allianceQueries, playerQueries } = require('../utility/database');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { getFurnaceReadable } = require('./furnaceReadable');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
-const { getComponentEmoji, getEmojiMapForAdmin } = require('../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getComponentEmoji, getEmojiMapForUser } = require('../utility/emojis');
 
 /**
  * Creates the move players button for the player management panel
@@ -31,7 +32,7 @@ function createMovePlayersButton(userId, lang = {}) {
         .setCustomId(`move_players_${userId}`)
         .setLabel(lang.players.mainPage.buttons.movePlayers)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1033'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1033'));
 }
 
 /**
@@ -40,7 +41,7 @@ function createMovePlayersButton(userId, lang = {}) {
  */
 async function handleMovePlayersButton(interaction) {
     // Get user's language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // move_players_userId
@@ -68,19 +69,6 @@ async function handleMovePlayersButton(interaction) {
             });
         }
 
-        // Filter out alliances with 0 members for source selection
-        const alliancesWithMembers = allAlliances.filter(alliance => {
-            const playerCount = playerQueries.getPlayersByAllianceId(alliance.id).length;
-            return playerCount > 0;
-        });
-
-        if (alliancesWithMembers.length === 0) {
-            return await interaction.reply({
-                content: lang.players.movePlayer.errors.noAlliancesWithMembers,
-                ephemeral: true
-            });
-        }
-
         if (allAlliances.length < 2) {
             return await interaction.reply({
                 content: lang.players.movePlayer.errors.insufficientAlliances,
@@ -88,17 +76,16 @@ async function handleMovePlayersButton(interaction) {
             });
         }
 
-        // Create source alliance selection embed and dropdown
-        const { components } = createSourceAllianceSelectionEmbed(alliancesWithMembers, interaction, lang);
+        // Show target alliance selection as the first step
+        const { components } = createTargetAllianceSelectionContainer(allAlliances, interaction, lang);
 
         await interaction.update({
             components: components,
             flags: MessageFlags.IsComponentsV2
         });
 
-
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersButton');
+        await handleError(interaction, lang, error, 'handleMovePlayersButton');
     }
 }
 
@@ -141,7 +128,7 @@ function getAlliancesForUser(adminData) {
  * @param {string} type - Type of pagination: 'source', 'dest', or 'player'
  */
 async function handleMovePlayersPagination(interaction, type) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Parse with 0 context initially to get subtype, then extract correct amount
         const parsed = parsePaginationCustomId(interaction.customId, 0);
@@ -151,26 +138,23 @@ async function handleMovePlayersPagination(interaction, type) {
         // Check if the interaction user matches the expected user
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        if (subtype === 'source') {
-            // move_players_source_prev/next_userId_currentPage
+        if (subtype === 'target') {
+            // move_players_target_prev/next_userId_currentPage
             const allAlliances = getAlliancesForUser(adminData);
-            const alliancesWithMembers = allAlliances.filter(alliance => {
-                const playerCount = playerQueries.getPlayersByAllianceId(alliance.id).length;
-                return playerCount > 0;
-            });
-
-            const { components } = createSourceAllianceSelectionEmbed(alliancesWithMembers, interaction, lang, newPage);
+            const { components } = createTargetAllianceSelectionContainer(allAlliances, interaction, lang, newPage);
             await interaction.update({ components: components, flags: MessageFlags.IsComponentsV2 });
 
-        } else if (subtype === 'dest') {
-            // move_players_dest_prev/next_userId_sourceId_currentPage
-            const sourceAllianceId = parseInt(contextData[0]);
-
-            const sourceAlliance = allianceQueries.getAllianceById(sourceAllianceId);
+        } else if (subtype === 'source') {
+            // move_players_source_prev/next_userId_destId_currentPage
+            const destAllianceId = parseInt(contextData[0]);
+            const destAlliance = allianceQueries.getAllianceById(destAllianceId);
             const allAlliances = getAlliancesForUser(adminData);
-            const alliances = allAlliances.filter(alliance => alliance.id !== sourceAllianceId);
+            const sourceAlliances = allAlliances.filter(alliance => {
+                if (alliance.id === destAllianceId) return false;
+                return playerQueries.getPlayersByAllianceId(alliance.id).length > 0;
+            });
 
-            const { components } = createDestinationAllianceSelectionContainer(alliances, interaction, lang, sourceAlliance, newPage);
+            const { components } = createSourceAllianceSelectionEmbed(sourceAlliances, interaction, lang, destAlliance, newPage);
             await interaction.update({ components: components, flags: MessageFlags.IsComponentsV2 });
 
         } else if (subtype === 'player') {
@@ -208,7 +192,7 @@ async function handleMovePlayersPagination(interaction, type) {
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, `handleMovePlayersPagination_${type}`);
+        await handleError(interaction, lang, error, `handleMovePlayersPagination_${type}`);
     }
 }
 
@@ -222,23 +206,44 @@ async function handleMovePlayersPagination(interaction, type) {
  * @returns {Object} Embed and components
  */
 /**
- * Creates source alliance selection embed using shared utility
+ * Creates the source alliance selection container with Move by ID button (Step 2)
+ * @param {Array} alliances - Alliance objects with members (excluding target)
+ * @param {Object} interaction - Interaction object
+ * @param {Object} lang - Language object
+ * @param {Object} destAlliance - The already-selected target alliance
+ * @param {number} [page=0] - Current page number (default 0)
+ * @returns {Object} Components
  */
-function createSourceAllianceSelectionEmbed(alliances, interaction, lang, page = 0) {
-    return createAllianceSelectionComponents({
-        interaction,
-        alliances,
-        lang,
-        page,
-        customIdPrefix: 'move_players_source_select',
+function createSourceAllianceSelectionEmbed(alliances, interaction, lang, destAlliance, page = 0) {
+    const itemsPerPage = 24;
+    const totalPages = Math.max(1, Math.ceil(alliances.length / itemsPerPage));
+    const startIndex = page * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentPageAlliances = alliances.slice(startIndex, endIndex);
+
+    const actionRows = [];
+
+    // Move by ID button - moves any player to the target alliance without selecting a source
+    const moveByIdButton = new ButtonBuilder()
+        .setCustomId(`move_players_add_ids_${interaction.user.id}_0_${destAlliance.id}`)
+        .setLabel(lang.players.movePlayer.buttons.inputPlayerId)
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1021'));
+
+    const paginationRow = createUniversalPaginationButtons({
         feature: 'move_players',
         subtype: 'source',
-        placeholder: lang.players.movePlayer.selectMenu.sourceAlliance.placeholder,
-        title: lang.players.movePlayer.content.title.base,
-        description: lang.players.movePlayer.content.description.base,
-        accentColor: 0x3498db,
-        showAll: false,
-        optionMapper: (alliance) => {
+        userId: interaction.user.id,
+        currentPage: page,
+        totalPages: totalPages,
+        lang: lang,
+        contextData: [destAlliance.id]
+    });
+
+
+    // Source alliance dropdown (only shown when alliances with members exist)
+    if (currentPageAlliances.length > 0) {
+        const options = currentPageAlliances.map(alliance => {
             const playerCount = playerQueries.getPlayersByAllianceId(alliance.id).length;
             return {
                 label: alliance.name,
@@ -246,80 +251,110 @@ function createSourceAllianceSelectionEmbed(alliances, interaction, lang, page =
                 description: lang.players.movePlayer.selectMenu.sourceAlliance.description
                     .replace('{priority}', alliance.priority)
                     .replace('{playerCount}', playerCount),
-                emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1001')
+                emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1001')
             };
-        }
-    });
+        });
+
+        const allianceSelect = new StringSelectMenuBuilder()
+            .setCustomId(`move_players_source_select_${destAlliance.id}_${interaction.user.id}_${page}`)
+            .setPlaceholder(lang.players.movePlayer.selectMenu.sourceAlliance.placeholder)
+            .addOptions(options);
+
+        actionRows.push(new ActionRowBuilder().addComponents(allianceSelect));
+    }
+
+    if (paginationRow) {
+        paginationRow.components.push(moveByIdButton);
+        actionRows.push(paginationRow);
+    }
+
+    const newSection = [
+        new ContainerBuilder()
+            .setAccentColor(0x3498db)
+            .addSectionComponents(
+                new SectionBuilder()
+                    .setButtonAccessory(
+                        moveByIdButton
+                    )
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent(
+                            `${lang.players.movePlayer.content.title.base}` +
+                            `\n${lang.players.movePlayer.content.description.base.replace('{targetName}', destAlliance.name)}` +
+                            `\n${lang.pagination.text.pageInfo.replace('{current}', (page + 1)).replace('{total}', totalPages)}`
+                        )
+                    )
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+            )
+            .addActionRowComponents(actionRows)
+    ];
+
+    return { components: updateComponentsV2AfterSeparator(interaction, newSection) };
 }
 
 /**
- * Creates the destination alliance selection embed and dropdown with pagination
- * @param {Array} alliances - Array of alliance objects (excluding source)
+ * Creates the target alliance selection container with pagination (Step 1)
+ * @param {Array} alliances - Array of all accessible alliance objects
  * @param {Object} interaction - Interaction object
  * @param {Object} lang - Language object
- * @param {Object} sourceAlliance - Source alliance object
  * @param {number} [page=0] - Current page number (default 0)
- * @returns {Object} Embed and components
+ * @returns {Object} Components
  */
-function createDestinationAllianceSelectionContainer(alliances, interaction, lang, sourceAlliance, page = 0) {
+function createTargetAllianceSelectionContainer(alliances, interaction, lang, page = 0) {
     const itemsPerPage = 24;
     const totalPages = Math.ceil(alliances.length / itemsPerPage);
     const startIndex = page * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const currentPageAlliances = alliances.slice(startIndex, endIndex);
 
-    // Create dropdown options
     const options = currentPageAlliances.map(alliance => {
         const playerCount = playerQueries.getPlayersByAllianceId(alliance.id).length;
         return {
             label: alliance.name,
             value: alliance.id.toString(),
-            description: (lang.players.movePlayer.selectMenu.destinationAlliance.description).replace('{priority}', alliance.priority).replace('{playerCount}', playerCount),
-            emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1043')
+            description: lang.players.movePlayer.selectMenu.destinationAlliance.description
+                .replace('{priority}', alliance.priority)
+                .replace('{playerCount}', playerCount),
+            emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1043')
         };
     });
 
-    // Create dropdown menu
     const allianceSelect = new StringSelectMenuBuilder()
-        .setCustomId(`move_players_dest_select_${interaction.user.id}_${sourceAlliance.id}_${page}`)
+        .setCustomId(`move_players_target_select_${interaction.user.id}_${page}`)
         .setPlaceholder(lang.players.movePlayer.selectMenu.destinationAlliance.placeholder)
         .addOptions(options);
 
     const actionRows = [];
 
-    // Add pagination buttons if needed
     const paginationRow = createUniversalPaginationButtons({
         feature: 'move_players',
-        subtype: 'dest',
+        subtype: 'target',
         userId: interaction.user.id,
         currentPage: page,
         totalPages: totalPages,
-        lang: lang,
-        contextData: [sourceAlliance.id]
+        lang: lang
     });
     if (paginationRow) {
         actionRows.push(paginationRow);
     }
 
-    // Add dropdown menu
     actionRows.push(new ActionRowBuilder().addComponents(allianceSelect));
 
     const newSection = [
         new ContainerBuilder()
-            .setAccentColor(0xe67e22) // Orange color
+            .setAccentColor(0xe67e22)
             .addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
                     `${lang.players.movePlayer.content.title.selectDestination}` +
-                    `\n${(lang.players.movePlayer.content.description.selectDestination).replace('{sourceName}', sourceAlliance.name)}` +
+                    `\n${lang.players.movePlayer.content.description.selectDestination}` +
                     `\n${lang.pagination.text.pageInfo.replace('{current}', (page + 1)).replace('{total}', totalPages)}`
                 )
             )
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
             )
-            .addActionRowComponents(
-                actionRows
-            )
+            .addActionRowComponents(actionRows)
     ];
 
     return { components: updateComponentsV2AfterSeparator(interaction, newSection) };
@@ -353,7 +388,7 @@ function createPlayerSelectionEmbed(players, lang, sourceAlliance, destAlliance,
         .setCustomId(`move_players_add_ids_${interaction.user.id}_${sourceId}_${destId}`)
         .setLabel(lang.players.movePlayer.buttons.inputPlayerId)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1021'))
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1021'))
         ;
 
     // Add pagination buttons only if multiple pages
@@ -385,7 +420,7 @@ function createPlayerSelectionEmbed(players, lang, sourceAlliance, destAlliance,
                 .replace('{id}', player.fid)
                 .replace('{furnace}', getFurnaceReadable(player.furnace_level, lang))
                 .replace('{state}', player.state || 'Unknown'),
-            emoji: getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1026')
+            emoji: getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1026')
         }));
 
         const playerSelect = new StringSelectMenuBuilder()
@@ -430,11 +465,11 @@ async function handleMovePlayersSourcePagination(interaction) {
 }
 
 /**
- * Handles destination alliance selection pagination
+ * Handles target alliance selection pagination
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
-async function handleMovePlayersDestPagination(interaction) {
-    await handleMovePlayersPagination(interaction, 'dest');
+async function handleMovePlayersTargetPagination(interaction) {
+    await handleMovePlayersPagination(interaction, 'target');
 }
 
 /**
@@ -446,59 +481,19 @@ async function handleMovePlayersPlayerPagination(interaction) {
 }
 
 /**
- * Handles source alliance selection
+ * Handles source alliance selection (Step 2 → Step 3)
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleMovePlayersSourceSelection(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
-        const expectedUserId = customIdParts[4]; // move_players_source_select_userId_page
+        const destAllianceId = parseInt(customIdParts[4]); // move_players_source_select_destId_userId_page
+        const expectedUserId = customIdParts[5];
 
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
         const sourceAllianceId = parseInt(interaction.values[0]);
-        const sourceAlliance = allianceQueries.getAllianceById(sourceAllianceId);
-
-        if (!sourceAlliance) {
-            return await interaction.reply({
-                content: lang.common.error,
-                embeds: [],
-                components: []
-            });
-        }
-
-        // Get all alliances except the source
-        const allAlliances = getAlliancesForUser(adminData);
-        const alliances = allAlliances.filter(alliance => alliance.id !== sourceAllianceId);
-
-        const { components } = createDestinationAllianceSelectionContainer(alliances, interaction, lang, sourceAlliance);
-
-        await interaction.update({
-            components: components,
-            flags: MessageFlags.IsComponentsV2
-        });
-
-
-    } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersSourceSelection');
-    }
-}
-
-/**
- * Handles destination alliance selection
- * @param {import('discord.js').StringSelectMenuInteraction} interaction 
- */
-async function handleMovePlayersDestSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
-    try {
-        const customIdParts = interaction.customId.split('_');
-        const expectedUserId = customIdParts[4]; // move_players_dest_select_userId_sourceId_page
-        const sourceAllianceId = parseInt(customIdParts[5]);
-
-        if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
-
-        const destAllianceId = parseInt(interaction.values[0]);
         const sourceAlliance = allianceQueries.getAllianceById(sourceAllianceId);
         const destAlliance = allianceQueries.getAllianceById(destAllianceId);
 
@@ -510,7 +505,6 @@ async function handleMovePlayersDestSelection(interaction) {
             });
         }
 
-        // Get players from source alliance
         const players = playerQueries.getPlayersByAllianceId(sourceAllianceId);
 
         if (players.length === 0) {
@@ -538,9 +532,49 @@ async function handleMovePlayersDestSelection(interaction) {
             flags: MessageFlags.IsComponentsV2
         });
 
+    } catch (error) {
+        await handleError(interaction, lang, error, 'handleMovePlayersSourceSelection');
+    }
+}
+
+/**
+ * Handles target alliance selection (Step 1 → Step 2)
+ * @param {import('discord.js').StringSelectMenuInteraction} interaction 
+ */
+async function handleMovePlayersTargetSelection(interaction) {
+    const { adminData, lang } = getUserInfo(interaction.user.id);
+    try {
+        const customIdParts = interaction.customId.split('_');
+        const expectedUserId = customIdParts[4]; // move_players_target_select_userId_page
+
+        if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
+
+        const destAllianceId = parseInt(interaction.values[0]);
+        const destAlliance = allianceQueries.getAllianceById(destAllianceId);
+
+        if (!destAlliance) {
+            return await interaction.reply({
+                content: lang.common.error,
+                ephemeral: true
+            });
+        }
+
+        // Source alliances: all accessible alliances with members, excluding the target
+        const allAlliances = getAlliancesForUser(adminData);
+        const sourceAlliances = allAlliances.filter(alliance => {
+            if (alliance.id === destAllianceId) return false;
+            return playerQueries.getPlayersByAllianceId(alliance.id).length > 0;
+        });
+
+        const { components } = createSourceAllianceSelectionEmbed(sourceAlliances, interaction, lang, destAlliance);
+
+        await interaction.update({
+            components: components,
+            flags: MessageFlags.IsComponentsV2
+        });
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersDestSelection');
+        await handleError(interaction, lang, error, 'handleMovePlayersTargetSelection');
     }
 }
 
@@ -549,7 +583,7 @@ async function handleMovePlayersDestSelection(interaction) {
  * @param {import('discord.js').StringSelectMenuInteraction} interaction 
  */
 async function handleMovePlayersPlayerSelection(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -571,7 +605,7 @@ async function handleMovePlayersPlayerSelection(interaction) {
                 playerQueries.updatePlayerAlliance(playerId, destAllianceId);
                 movedCount++;
             } catch (error) {
-                await sendError(interaction, null, error, 'handleMovePlayersPlayerSelection_movePlayer', false);
+                await handleError(interaction, null, error, 'handleMovePlayersPlayerSelection_movePlayer', false);
             }
         }
 
@@ -629,7 +663,7 @@ async function handleMovePlayersPlayerSelection(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersPlayerSelection');
+        await handleError(interaction, lang, error, 'handleMovePlayersPlayerSelection');
     }
 }
 
@@ -638,7 +672,7 @@ async function handleMovePlayersPlayerSelection(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleMovePlayersAddIds(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const expectedUserId = customIdParts[4]; // move_players_add_ids_userId_sourceId_destId
@@ -672,7 +706,7 @@ async function handleMovePlayersAddIds(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersAddIds');
+        await handleError(interaction, lang, error, 'handleMovePlayersAddIds');
     }
 }
 
@@ -681,7 +715,7 @@ async function handleMovePlayersAddIds(interaction) {
  * @param {import('discord.js').ModalSubmitInteraction} interaction 
  */
 async function handleMovePlayersIdsModal(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
 
     try {
         const customIdParts = interaction.customId.split('_');
@@ -691,7 +725,8 @@ async function handleMovePlayersIdsModal(interaction) {
 
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        const sourceAlliance = allianceQueries.getAllianceById(sourceAllianceId);
+        const isAnySource = sourceAllianceId === 0;
+        const sourceAlliance = isAnySource ? null : allianceQueries.getAllianceById(sourceAllianceId);
         const destAlliance = allianceQueries.getAllianceById(destAllianceId);
 
         // Get and sanitize player IDs
@@ -719,7 +754,7 @@ async function handleMovePlayersIdsModal(interaction) {
                 continue;
             }
 
-            if (player.alliance_id === sourceAllianceId) {
+            if (isAnySource || player.alliance_id === sourceAllianceId) {
                 foundPlayers.push(player);
             } else {
                 const playerAlliance = allianceQueries.getAllianceById(player.alliance_id);
@@ -737,57 +772,88 @@ async function handleMovePlayersIdsModal(interaction) {
                 playerQueries.updatePlayerAlliance(player.fid, destAllianceId);
                 movedCount++;
             } catch (error) {
-                await sendError(interaction, lang, error, 'handleMovePlayersIdsModal_movePlayer', false);
+                await handleError(interaction, lang, error, 'handleMovePlayersIdsModal_movePlayer', false);
             }
         }
 
-        // Create response content for Components v2
-        let responseContent = `${lang.players.movePlayer.content.title.result}\n`;
+        // Create response content for Components v2 (max 3900 chars per TextDisplay)
+        const lc = lang.players.movePlayer.content;
+        let responseContent = `${lc.title.result}\n`;
 
+        // --- Moved players section ---
         if (movedCount > 0) {
-            responseContent += `\n${lang.players.movePlayer.content.movedField.name}\n${lang.players.movePlayer.content.movedField.value
-                .replace('{movedCount}', movedCount)
-                .replace('{sourceName}', sourceAlliance.name)
-                .replace('{destName}', destAlliance.name)}`;
+            responseContent += isAnySource
+                ? `\n${lc.movedField.name}\n${lc.movedField.valueNoSource
+                    .replace('{movedCount}', movedCount)
+                    .replace('{destName}', destAlliance.name)}`
+                : `\n${lc.movedField.name}\n${lc.movedField.value
+                    .replace('{movedCount}', movedCount)
+                    .replace('{sourceName}', sourceAlliance.name)
+                    .replace('{destName}', destAlliance.name)}`;
+
+            const movedList = buildPlayerList(
+                foundPlayers,
+                1200,
+                p => lc.listEntry.replace('{name}', p.nickname || p.fid.toString()).replace('{fid}', p.fid.toString()),
+                lc.andMore
+            );
+            if (movedList) responseContent += '\n' + movedList;
         }
 
+        // --- Not found section ---
         if (notFoundPlayers.length > 0) {
-            responseContent += `\n\n${lang.players.movePlayer.content.notFoundField.name}\n${lang.players.movePlayer.content.notFoundField.value
-                .replace('{notFoundCount}', notFoundPlayers.length)
-                .replace('{sourceName}', sourceAlliance.name)
-                .replace('{notFoundIds}', notFoundPlayers.join(', '))}`;
+            // Truncate IDs list if too long (600-char budget)
+            let idsStr = '';
+            let shownIdCount = 0;
+            for (const id of notFoundPlayers) {
+                const part = idsStr ? `, ${id}` : `${id}`;
+                if (idsStr.length + part.length + 20 > 600) break;
+                idsStr += part;
+                shownIdCount++;
+            }
+            const hiddenIdCount = notFoundPlayers.length - shownIdCount;
+            if (hiddenIdCount > 0) idsStr += ` +${hiddenIdCount}`;
+
+            responseContent += isAnySource
+                ? `\n\n${lc.notFoundField.name}\n${lc.notFoundField.valueNoSource
+                    .replace('{notFoundCount}', notFoundPlayers.length)
+                    .replace('{notFoundIds}', idsStr)}`
+                : `\n\n${lc.notFoundField.name}\n${lc.notFoundField.value
+                    .replace('{notFoundCount}', notFoundPlayers.length)
+                    .replace('{sourceName}', sourceAlliance.name)
+                    .replace('{notFoundIds}', idsStr)}`;
         }
 
+        // --- Wrong alliance section ---
         if (wrongAlliancePlayers.length > 0) {
-            const wrongAllianceText = wrongAlliancePlayers.map(item => {
-                const allianceName = item.alliance ? item.alliance.name : 'Unknown Alliance';
-                return `${item.player.nickname || item.player.fid} (${allianceName})`;
-            }).join(', ');
+            responseContent += `\n${lc.wrongAllianceField.name}\n${lc.wrongAllianceField.value}`;
 
-            // Truncate if too long for embed
-            const truncatedText = wrongAllianceText.length > 1000 ?
-                wrongAllianceText.substring(0, 997) + '...' : wrongAllianceText;
+            const wrongList = buildPlayerList(
+                wrongAlliancePlayers,
+                800,
+                item => `  - ${item.player.nickname || item.player.fid} (${item.alliance ? item.alliance.name : lang.common.unknown})`,
+                lc.andMore
+            );
+            if (wrongList) responseContent += '\n' + wrongList;
 
-            responseContent += `\n${lang.players.movePlayer.content.wrongAllianceField.name}\n${lang.players.movePlayer.content.wrongAllianceField.value}\n${truncatedText}`;
-
-            // Add buttons for wrong alliance players
+            // Add confirm/cancel buttons
             const actionRow = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId(`move_players_confirm_wrong_${sourceAllianceId}_${destAllianceId}_${interaction.user.id}`)
                         .setLabel(lang.players.movePlayer.buttons.confirm)
                         .setStyle(ButtonStyle.Danger)
-                        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1004')),
+                        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1004')),
                     new ButtonBuilder()
                         .setCustomId(`move_players_cancel_wrong_${interaction.user.id}`)
                         .setLabel(lang.players.movePlayer.buttons.cancel)
                         .setStyle(ButtonStyle.Secondary)
-                        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(interaction.user.id), '1051'))
+                        .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1051'))
                 );
 
             const responseSection = [
                 new ContainerBuilder()
-                    .setAccentColor(movedCount > 0 ? 0x00ff00 : 0xffa500)
+                    .setAccentColor(movedCount > 0 ? 0x2ecc71 : 0xffa500)
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(responseContent)
                     )
@@ -801,13 +867,13 @@ async function handleMovePlayersIdsModal(interaction) {
                 flags: MessageFlags.IsComponentsV2
             });
 
-            // Store wrong alliance players in a temporary way (now using a module-scoped Map)
+            // Store wrong alliance players for the confirmation step
             tempMoveData.set(interaction.user.id, wrongAlliancePlayers);
 
         } else {
             const responseSection = [
                 new ContainerBuilder()
-                    .setAccentColor(movedCount > 0 ? 0x00ff00 : 0xffa500)
+                    .setAccentColor(movedCount > 0 ? 0x2ecc71 : 0xff0000)
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(responseContent)
                     )
@@ -823,7 +889,7 @@ async function handleMovePlayersIdsModal(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersIdsModal');
+        await handleError(interaction, lang, error, 'handleMovePlayersIdsModal');
     }
 }
 
@@ -832,15 +898,17 @@ async function handleMovePlayersIdsModal(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleMovePlayersConfirmWrong(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const customIdParts = interaction.customId.split('_');
         const sourceAllianceId = parseInt(customIdParts[4]); // move_players_confirm_wrong_sourceId_destId_userId
         const destAllianceId = parseInt(customIdParts[5]);
         const expectedUserId = customIdParts[6];
 
+        if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
 
-        if (!assertUserMatches(interaction, expectedUserId, lang)) return;
+        const destAlliance = allianceQueries.getAllianceById(destAllianceId);
+        const wrongAlliancePlayers = tempMoveData.get(interaction.user.id) || [];
 
         let movedCount = 0;
         for (const item of wrongAlliancePlayers) {
@@ -848,7 +916,7 @@ async function handleMovePlayersConfirmWrong(interaction) {
                 playerQueries.updatePlayerAlliance(item.player.fid, destAllianceId);
                 movedCount++;
             } catch (error) {
-                await sendError(interaction, lang, error, 'handleMovePlayersConfirmWrong_movePlayer', false);
+                await handleError(interaction, lang, error, 'handleMovePlayersConfirmWrong_movePlayer', false);
             }
         }
 
@@ -857,16 +925,26 @@ async function handleMovePlayersConfirmWrong(interaction) {
             tempMoveData.delete(interaction.user.id);
         }
 
+        const lc = lang.players.movePlayer.content;
+        let successText =
+            `${lc.title.success}` +
+            `\n${lc.description.success.replace('{count}', movedCount).replace('{destName}', destAlliance.name)}`;
+
+        // Append the list of moved players
+        const movedPlayerObjects = wrongAlliancePlayers.map(item => item.player);
+        const movedList = buildPlayerList(
+            movedPlayerObjects,
+            1200,
+            p => lc.listEntry.replace('{name}', p.nickname || p.fid.toString()).replace('{fid}', p.fid.toString()),
+            lc.andMore
+        );
+        if (movedList) successText += '\n' + movedList;
+
         const successSection = [
             new ContainerBuilder()
-                .setAccentColor(0x2ecc71) // Green color
+                .setAccentColor(0x2ecc71)
                 .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(
-                        `${lang.players.movePlayer.content.title.success}` +
-                        `\n${(lang.players.movePlayer.content.description.success)
-                            .replace('{count}', movedCount)
-                            .replace('{destName}', destAlliance.name)}`
-                    )
+                    new TextDisplayBuilder().setContent(successText)
                 )
         ];
 
@@ -877,9 +955,8 @@ async function handleMovePlayersConfirmWrong(interaction) {
             flags: MessageFlags.IsComponentsV2
         });
 
-
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersConfirmWrong');
+        await handleError(interaction, lang, error, 'handleMovePlayersConfirmWrong');
     }
 }
 
@@ -888,7 +965,7 @@ async function handleMovePlayersConfirmWrong(interaction) {
  * @param {import('discord.js').ButtonInteraction} interaction 
  */
 async function handleMovePlayersCancelWrong(interaction) {
-    const { lang } = getAdminLang(interaction.user.id);
+    const { lang } = getUserInfo(interaction.user.id);
     try {
         const expectedUserId = interaction.customId.split('_')[4]; // move_players_cancel_wrong_userId
 
@@ -919,7 +996,7 @@ async function handleMovePlayersCancelWrong(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleMovePlayersCancelWrong');
+        await handleError(interaction, lang, error, 'handleMovePlayersCancelWrong');
     }
 }
 
@@ -959,17 +1036,46 @@ function sanitizePlayerIds(rawInput) {
     }
 }
 
+/**
+ * Builds a paginated player list string, truncating with "and N more" when the budget is exceeded.
+ * @param {Array} items - Array of items to format
+ * @param {number} budget - Max character budget for the entire list
+ * @param {Function} formatEntry - Returns a display string for each item (without leading newline)
+ * @param {string} andMoreTemplate - Template for overflow line, e.g. "  - ... and {n} more"
+ * @returns {string} Formatted list or empty string
+ */
+function buildPlayerList(items, budget, formatEntry, andMoreTemplate) {
+    if (!items || items.length === 0) return '';
+    const lines = [];
+    let usedChars = 0;
+    let shown = 0;
+    for (const item of items) {
+        const entry = formatEntry(item);
+        const lineWithNewline = '\n' + entry;
+        if (usedChars + lineWithNewline.length > budget) break;
+        lines.push(entry);
+        usedChars += lineWithNewline.length;
+        shown++;
+    }
+    const remaining = items.length - shown;
+    const result = lines.join('\n');
+    if (remaining > 0) {
+        return result + '\n' + andMoreTemplate.replace('{n}', remaining);
+    }
+    return result;
+}
+
 // Module-scoped temp data store for move operations (in-memory, not persistent)
 const tempMoveData = new Map();
 
 module.exports = {
     createMovePlayersButton,
     handleMovePlayersButton,
+    handleMovePlayersTargetPagination,
     handleMovePlayersSourcePagination,
-    handleMovePlayersDestPagination,
     handleMovePlayersPlayerPagination,
+    handleMovePlayersTargetSelection,
     handleMovePlayersSourceSelection,
-    handleMovePlayersDestSelection,
     handleMovePlayersPlayerSelection,
     handleMovePlayersAddIds,
     handleMovePlayersIdsModal,

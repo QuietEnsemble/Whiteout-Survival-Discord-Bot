@@ -220,9 +220,9 @@ Language files are in `src/i18n/`:
 ### Usage Pattern
 
 ```js
-const { getAdminLang } = require('../utility/commonFunctions');
+const { getUserInfo } = require('../utility/commonFunctions');
 
-const { adminData, lang } = getAdminLang(interaction.user.id);
+const { adminData, lang } = getUserInfo(interaction.user.id);
 // lang.settings.mainPage.content.title → "### ⚙️ Bot Settings"
 ```
 
@@ -248,10 +248,10 @@ The `lang` object auto-replaces `{emoji.XXX}` placeholders with the user's activ
 ### Using Emojis in Code
 
 ```js
-const { getEmojiMapForAdmin, getComponentEmoji } = require('../utility/emojis');
+const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
 // For embed text
-const emojiMap = getEmojiMapForAdmin(userId);
+const emojiMap = getEmojiMapForUser(userId);
 // emojiMap['1004'] → '✅' or custom Discord emoji
 
 // For button emojis (parsed format)
@@ -299,7 +299,7 @@ function createMyFeatureButton(userId, lang) {
 }
 
 async function handleMyFeatureButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     // ... your logic
 }
 
@@ -318,7 +318,7 @@ async function handleMyFeatureButton(interaction) {
 
 ```js
 async function handleSomething(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         const expectedUserId = interaction.customId.split('_')[2];
         if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
@@ -328,7 +328,7 @@ async function handleSomething(interaction) {
         }
         // ... your logic
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleSomething');
+        await handleError(interaction, lang, error, 'handleSomething');
     }
 }
 ```

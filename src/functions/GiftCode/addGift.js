@@ -1,9 +1,9 @@
-const { ButtonBuilder, ButtonStyle, EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, ContainerBuilder, MessageFlags, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
-const { giftCodeQueries, allianceQueries, playerQueries, systemLogQueries } = require('../utility/database');
+const { ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, ContainerBuilder, MessageFlags, TextDisplayBuilder } = require('discord.js');
+const { giftCodeQueries, allianceQueries, playerQueries } = require('../utility/database');
 const { createRedeemProcess } = require('./redeemFunction');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { hasPermission, sendError, getAdminLang, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
-const { getEmojiMapForAdmin, getComponentEmoji } = require('./../utility/emojis');
+const { hasPermission, handleError, getUserInfo, assertUserMatches, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
+const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
 
 
 /**
@@ -17,7 +17,7 @@ function createAddGiftButton(userId, lang = {}) {
         .setCustomId(`add_gift_${userId}`)
         .setLabel(lang.giftCode.mainPage.buttons.addGiftCode)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForAdmin(userId), '1000'));
+        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1000'));
 }
 
 /**
@@ -25,7 +25,7 @@ function createAddGiftButton(userId, lang = {}) {
  * @param {import('discord.js').ButtonInteraction} interaction
  */
 async function handleAddGiftButton(interaction) {
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[2]; // add_gift_userId
@@ -66,7 +66,7 @@ async function handleAddGiftButton(interaction) {
 
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleAddGiftButton');
+        await handleError(interaction, lang, error, 'handleAddGiftButton');
     }
 }
 
@@ -76,7 +76,7 @@ async function handleAddGiftButton(interaction) {
  */
 async function handleGiftCodeModal(interaction) {
     // Get admin language preference
-    const { adminData, lang } = getAdminLang(interaction.user.id);
+    const { adminData, lang } = getUserInfo(interaction.user.id);
     try {
         // Extract user ID from custom ID
         const expectedUserId = interaction.customId.split('_')[3]; // add_gift_modal_userId
@@ -152,21 +152,10 @@ async function handleGiftCodeModal(interaction) {
                 // Set last_validated timestamp to prevent re-validation by validateExistingCodes
                 giftCodeQueries.updateLastValidated(giftCode);
 
-                systemLogQueries.addLog(
-                    'info',
-                    `Gift code added to database: ${giftCode}`,
-                    JSON.stringify({
-                        gift_code: giftCode,
-                        added_by: interaction.user.id,
-                        is_vip: isVipCode,
-                        function: 'handleGiftCodeModal'
-                    })
-                );
-
                 // Start auto-redeem for alliances
                 setImmediate(() => {
                     startAutoRedeemForAlliances(giftCode, interaction.user.id, lang).catch(async error => {
-                        await sendError(interaction, lang, error, 'startAutoRedeemForAlliances', false);
+                        await handleError(interaction, lang, error, 'startAutoRedeemForAlliances', false);
                     });
                 });
 
@@ -189,11 +178,11 @@ async function handleGiftCodeModal(interaction) {
                 });
 
             } catch (dbError) {
-                await sendError(interaction, lang, dbError, 'handleGiftCodeModal_dbError');
+                await handleError(interaction, lang, dbError, 'handleGiftCodeModal_dbError');
             }
         }
     } catch (error) {
-        await sendError(interaction, lang, error, 'handleGiftCodeModal');
+        await handleError(interaction, lang, error, 'handleGiftCodeModal');
     }
 }
 
@@ -246,16 +235,16 @@ async function startAutoRedeemForAlliances(giftCode, adminId, lang) {
 
                 if (result && result.success) {
                 } else {
-                    await sendError(null, null, new Error(`Failed to start auto-redeem for alliance "${alliance.name}": ${result?.message || 'Unknown error'}`), 'startAutoRedeemForAlliances_redeemError', false);
+                    await handleError(null, null, new Error(`Failed to start auto-redeem for alliance "${alliance.name}": ${result?.message || 'Unknown error'}`), 'startAutoRedeemForAlliances_redeemError', false);
                 }
 
             } catch (allianceError) {
-                await sendError(interaction, lang, allianceError, 'startAutoRedeemForAlliances_allianceError');
+                await handleError(interaction, lang, allianceError, 'startAutoRedeemForAlliances_allianceError');
             }
         }
 
     } catch (error) {
-        await sendError(interaction, lang, error, 'startAutoRedeemForAlliances');
+        await handleError(interaction, lang, error, 'startAutoRedeemForAlliances');
     }
 }
 
