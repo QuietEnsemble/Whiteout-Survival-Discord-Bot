@@ -571,7 +571,7 @@ const playerQueries = {
         return db.prepare(query).all(...fids);
     },
 
-    // Delete multiple players in a single transaction
+    // Delete multiple players in a single atomic transaction
     deletePlayers: (fids) => {
         if (!fids || fids.length === 0) return;
         const placeholders = fids.map(() => '?').join(',');
@@ -582,10 +582,12 @@ const playerQueries = {
         const deleteGiftcodeUsageQuery = `DELETE FROM giftcode_usage WHERE fid IN (${placeholders})`;
         const deletePlayersQuery = `DELETE FROM players WHERE fid IN (${placeholders})`;
 
-        db.prepare(deleteFurnaceChangesQuery).run(...fids);
-        db.prepare(deleteNicknameChangesQuery).run(...fids);
-        db.prepare(deleteGiftcodeUsageQuery).run(...fids);
-        db.prepare(deletePlayersQuery).run(...fids);
+        db.transaction(() => {
+            db.prepare(deleteFurnaceChangesQuery).run(...fids);
+            db.prepare(deleteNicknameChangesQuery).run(...fids);
+            db.prepare(deleteGiftcodeUsageQuery).run(...fids);
+            db.prepare(deletePlayersQuery).run(...fids);
+        })();
     }
 };
 
@@ -1071,21 +1073,23 @@ const createGiftCode = (giftCode, status = 'active', addedBy, source = 'manual',
 const migrationQueries = {
     // Clear all data except settings, custom_emojis, and test_ids
     clearAllData: () => {
-        // Clear tables in correct order to respect foreign key constraints
-        db.prepare('DELETE FROM giftcode_usage').run();
-        db.prepare('DELETE FROM furnace_changes').run();
-        db.prepare('DELETE FROM nickname_changes').run();
-        db.prepare('DELETE FROM id_channels').run();
-        db.prepare('DELETE FROM gift_code_channels').run();
-        db.prepare('DELETE FROM players').run();
-        db.prepare('DELETE FROM alliance_logs').run();
-        db.prepare('DELETE FROM alliance').run();
-        db.prepare('DELETE FROM admin_logs').run();
-        db.prepare('DELETE FROM admins').run();
-        db.prepare('DELETE FROM users').run();
-        db.prepare('DELETE FROM processes').run();
-        db.prepare('DELETE FROM notifications').run();
-        db.prepare('DELETE FROM gift_codes').run();
+        // Clear all tables atomically in correct order to respect foreign key constraints
+        db.transaction(() => {
+            db.prepare('DELETE FROM giftcode_usage').run();
+            db.prepare('DELETE FROM furnace_changes').run();
+            db.prepare('DELETE FROM nickname_changes').run();
+            db.prepare('DELETE FROM id_channels').run();
+            db.prepare('DELETE FROM gift_code_channels').run();
+            db.prepare('DELETE FROM players').run();
+            db.prepare('DELETE FROM alliance_logs').run();
+            db.prepare('DELETE FROM alliance').run();
+            db.prepare('DELETE FROM admin_logs').run();
+            db.prepare('DELETE FROM admins').run();
+            db.prepare('DELETE FROM users').run();
+            db.prepare('DELETE FROM processes').run();
+            db.prepare('DELETE FROM notifications').run();
+            db.prepare('DELETE FROM gift_codes').run();
+        })();
     }
 };
 

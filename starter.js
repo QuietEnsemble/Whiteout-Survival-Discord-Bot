@@ -1,4 +1,4 @@
-const readline = require('readline');
+﻿const readline = require('readline');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -23,11 +23,60 @@ if (!global.gc) {
 }
 
 // ============================================================
+// NODE VERSION CHECK  (must pass before anything else runs)
+// ============================================================
+
+const ALLOWED_NODE_MAJORS = [18, 20, 22];
+const _currentNodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+if (!ALLOWED_NODE_MAJORS.includes(_currentNodeMajor)) {
+    console.error(`
+❌  Unsupported Node.js version: v${process.versions.node}`);
+    console.error(`   This bot requires Node.js 18, 20, or 22 (LTS releases).`);
+    console.error(`   Other versions lack prebuilt binaries for native addons`);
+    console.error(`   (better-sqlite3, onnxruntime-node) and will OOM or fail`);
+    console.error(`   to compile on memory-constrained containers.`);
+    console.error(`   Please switch to Node 18, 20, or 22 and restart.\n`);
+    process.exit(1);
+}
+
+// ============================================================
 // PRE-FLIGHT CHECKS: Dependencies, Files, and Version
 // ============================================================
 
 const GITHUB_REPO = 'whiteout-project/Whiteout-Survival-Discord-Bot';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+
+/**
+ * Recursively searches a directory for any .node native addon file.
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function hasNodeFile(dir) {
+    try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isFile() && entry.name.endsWith('.node')) return true;
+            if (entry.isDirectory() && hasNodeFile(path.join(dir, entry.name))) return true;
+        }
+    } catch { /* ignore permission / missing dir */ }
+    return false;
+}
+
+/**
+ * Returns true when native addon binaries are in place for the packages
+ * that require them (specifically better-sqlite3).
+ *
+ * Called after `checkDependencies` confirms all package directories exist so
+ * the bot does not start up with unbuilt native modules after a partial install
+ * that was killed before `npm rebuild` ran.
+ *
+ * @param {string} cwd - Project root
+ * @returns {boolean}
+ */
+function areNativeBinariesPresent(cwd) {
+    const bsqlite = path.join(cwd, 'node_modules', 'better-sqlite3');
+    if (!fs.existsSync(bsqlite)) return true; // package not installed, nothing to check
+    return ['build', 'compiled', 'addon-build'].some(d => hasNodeFile(path.join(bsqlite, d)));
+}
 
 /**
  * Checks that all required npm dependencies are installed
@@ -53,8 +102,18 @@ async function checkDependencies() {
         }
     }
 
-    if (missing.length > 0) {
+    const needsInstall = missing.length > 0;
+    // Also check native binaries: packages may be present (dirs exist) but binaries
+    // missing when a previous install was killed before Phase 2 (npm rebuild) ran.
+    const needsRebuild = !needsInstall && !areNativeBinariesPresent(__dirname);
+
+    if (needsInstall) {
         console.log(`[PREFLIGHT] Missing dependencies: ${missing.join(', ')}`);
+    } else if (needsRebuild) {
+        console.log('[PREFLIGHT] Packages present but native binaries missing. Running npm rebuild...');
+    }
+
+    if (needsInstall || needsRebuild) {
         const ok = await robustNpmInstall(__dirname, '[PREFLIGHT]');
         if (!ok) {
             console.error('[PREFLIGHT] Failed to install dependencies.');
@@ -475,7 +534,7 @@ function checkNodeVersion() {
 }
 
 // ============================================================
-// ROBUST NPM INSTALL: Retry + per-package fallback for low-RSS environments
+// ROBUST NPM INSTALL
 // ============================================================
 
 /** Promisified spawn — child memory is independent of our V8 heap. */
@@ -490,28 +549,204 @@ function spawnAsync(cmd, args, opts) {
     });
 }
 
+/**
+ * Like spawnAsync but captures stdout + stderr and attaches them to the
+ * rejection error. Both pipes are drained continuously to avoid the
+ * 64 KB pipe-buffer deadlock that occurs when using stdio:'pipe' with
+ * spawn() and not reading the streams.
+ */
+function spawnCapture(cmd, args, opts) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(cmd, args, {
+            ...opts,
+            shell: process.platform === 'win32',
+            stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d) => { stdout += d; });
+        child.stderr.on('data', (d) => { stderr += d; });
+        child.on('exit', (code) => {
+            if (code === 0) resolve();
+            else {
+                const err = new Error(`"${cmd} ${args.join(' ')}" exited with code ${code}`);
+                err.stdout = stdout;
+                err.stderr = stderr;
+                reject(err);
+            }
+        });
+        child.on('error', reject);
+    });
+}
+
 /** Simple sleep helper */
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Calculates a safe --max-old-space-size for the npm subprocess.
- * npm 11 needs ~300-400 MB just for packument caching on large trees.
- * We give it as much of the free RAM as we can, capped at 1 GB.
+ * Returns the container's memory limit in MB.
+ * On Linux, tries to read the cgroup limit (which reflects the actual
+ * container cap) before falling back to os.totalmem() (which reports
+ * the host's physical RAM and is therefore useless inside containers).
  */
-function npmHeapMb() {
-    const freeMb = Math.floor(os.freemem() / 1024 / 1024);
-    return Math.min(Math.max(freeMb - 64, 256), 1024); // leave 64 MB headroom
+function getEffectiveTotalMemMb() {
+    if (process.platform === 'linux') {
+        try {
+            const cgroupText = fs.readFileSync('/proc/self/cgroup', 'utf8');
+            const v2Match = cgroupText.match(/^0::(.*)$/m);
+            const cgroupBase = '/sys/fs/cgroup';
+            let searchPath = v2Match ? `${cgroupBase}${v2Match[1].trim()}` : cgroupBase;
+            while (searchPath.length >= cgroupBase.length) {
+                try {
+                    const raw = fs.readFileSync(`${searchPath}/memory.max`, 'utf8').trim();
+                    if (raw !== 'max') return Math.floor(Number(raw) / 1024 / 1024);
+                } catch { /* not at this level, try parent */ }
+                const parent = searchPath.substring(0, searchPath.lastIndexOf('/'));
+                if (parent === searchPath) break;
+                searchPath = parent;
+            }
+        } catch { /* /proc/self/cgroup not readable */ }
+
+        // cgroup v1
+        try {
+            const bytes = Number(fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8').trim());
+            // cgroup v1 uses ~9.2 EB as the sentinel for "no limit"
+            if (bytes < Number.MAX_SAFE_INTEGER / 2) return Math.floor(bytes / 1024 / 1024);
+        } catch { /* not mounted */ }
+    }
+    return Math.floor(os.totalmem() / 1024 / 1024);
 }
 
-const HEAVY_OPTIONAL_PACKAGES = new Set([
-    'onnxruntime-node', 
-]);
+/**
+ * Returns the container's free memory in MB.
+ * Reads cgroup usage on Linux so the value reflects the container's
+ * budget, not the host machine's available RAM.
+ */
+function getEffectiveFreeMemMb() {
+    if (process.platform === 'linux') {
+        const totalMb = getEffectiveTotalMemMb();
+        // cgroup v2: try current-cgroup path first, then root
+        try {
+            const cgroupText = fs.readFileSync('/proc/self/cgroup', 'utf8');
+            const v2Match = cgroupText.match(/^0::(.*)$/m);
+            const searchPath = v2Match
+                ? `/sys/fs/cgroup${v2Match[1].trim()}`
+                : '/sys/fs/cgroup';
+            const used = Math.floor(Number(fs.readFileSync(`${searchPath}/memory.current`, 'utf8').trim()) / 1024 / 1024);
+            return Math.max(totalMb - used, 0);
+        } catch { /* not mounted or process cgroup unreadable */ }
+        try {
+            const used = Math.floor(Number(fs.readFileSync('/sys/fs/cgroup/memory.current', 'utf8').trim()) / 1024 / 1024);
+            return Math.max(totalMb - used, 0);
+        } catch { /* not mounted */ }
+        // cgroup v1
+        try {
+            const used = Math.floor(Number(fs.readFileSync('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf8').trim()) / 1024 / 1024);
+            return Math.max(totalMb - used, 0);
+        } catch { /* not mounted */ }
+        // Usage data unavailable: cap os.freemem() at the container limit so
+        // the heap calculation never exceeds the container's total memory.
+        return Math.min(Math.floor(os.freemem() / 1024 / 1024), totalMb);
+    }
+    return Math.floor(os.freemem() / 1024 / 1024);
+}
 
 /**
- * Runs npm install with automatic retry and per-package fallback.
+ * Calculates a safe --max-old-space-size for the npm subprocess.
+ * On memory-constrained machines we leave more headroom so the OS
+ * and other processes are not crowded out.
+ */
+function npmHeapMb() {
+    const freeMb  = getEffectiveFreeMemMb();
+    const totalMb = getEffectiveTotalMemMb();
+    // Low-memory containers need a larger safety margin.
+    const headroom = totalMb < 1024 ? 160 : 80;
+    const min      = totalMb < 1024 ? 128 : 256;
+    const max      = totalMb < 1024 ? 384 : 1024;
+    return Math.min(Math.max(freeMb - headroom, min), max);
+}
+
+/**
+ * Returns true when the machine is memory-constrained (< 1 GB total).
+ * Used to show an informational log message during install.
+ */
+function isLowMemoryEnvironment() {
+    return getEffectiveTotalMemMb() < 1024;
+}
+
+
+// Config entries written to .npmrc before every install.
+// onnxruntime-node reads these to skip the ~500 MB CUDA provider download.
+const REQUIRED_NPMRC_ENTRIES = {
+    'onnxruntime-node-install': 'skip',       // primary flag (v1.20+)
+    'onnxruntime-node-install-cuda': 'skip',  // legacy fallback (v1.24.3)
+};
+
+/**
+ * Writes REQUIRED_NPMRC_ENTRIES into an .npmrc file, preserving existing keys.
+ * @param {string} npmrcPath - Absolute path to the .npmrc file to update
+ */
+function writeNpmrcEntries(npmrcPath) {
+    let lines = [];
+    if (fs.existsSync(npmrcPath)) {
+        try { lines = fs.readFileSync(npmrcPath, 'utf8').split(/\r?\n/); } catch { /* ignore */ }
+    }
+    for (const [key, value] of Object.entries(REQUIRED_NPMRC_ENTRIES)) {
+        const pattern = new RegExp(`^\\s*${key}\\s*=`, 'i');
+        const entry = `${key}=${value}`;
+        const idx = lines.findIndex(l => pattern.test(l));
+        if (idx >= 0) {
+            lines[idx] = entry;
+        } else {
+            lines.push(entry);
+        }
+    }
+    try {
+        fs.writeFileSync(npmrcPath, lines.join('\n'), 'utf8');
+    } catch (e) {
+        process.stderr.write(`[warn] Could not write ${npmrcPath}: ${e.message}\n`);
+    }
+}
+
+/**
+ * Ensures that the required .npmrc entries are present in both the project
+ * .npmrc and the user home .npmrc, so they are read by npm on all platforms.
+ * @param {string} cwd - Project root directory (where package.json lives)
+ */
+function ensureNpmrc(cwd) {
+    const projectNpmrc = path.join(cwd, '.npmrc');
+    writeNpmrcEntries(projectNpmrc);
+
+    // Also write to the user home .npmrc (~/.npmrc) when the project dir is
+    // different from home, so the entries are picked up even when npm resolves
+    // config from a different working directory.
+    const homeNpmrc = path.join(os.homedir(), '.npmrc');
+    if (path.resolve(homeNpmrc) !== path.resolve(projectNpmrc)) {
+        writeNpmrcEntries(homeNpmrc);
+    }
+}
+
+/**
+ * Checks whether all top-level dependencies in package.json are already
+ * installed in node_modules.  Uses `npm ls --depth=0` which exits 0 only
+ * when every listed dep is present and valid.
  *
+ * @param {string} cwd - Working directory
+ * @param {object} env - Environment variables to pass to npm
+ * @returns {Promise<boolean>}
+ */
+async function checkDepsInstalled(cwd, env) {
+    try {
+        await spawnCapture('npm', ['ls', '--depth=0', '--prefer-offline', '--no-audit'], { cwd, env });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Runs npm install with automatic retry.
  * @param {string} cwd     - Working directory (where package.json lives)
  * @param {string} context - Log prefix, e.g. '[PREFLIGHT]'
  * @returns {Promise<boolean>}
@@ -520,18 +755,46 @@ async function robustNpmInstall(cwd, context) {
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 5000;
     const heapMb = npmHeapMb();
-    const npmEnv = { ...process.env, NODE_OPTIONS: `--max-old-space-size=${heapMb}` };
-    const BASE_FLAGS = ['install', '--omit=optional', '--prefer-offline'];
+    const totalMb = getEffectiveTotalMemMb();
+    const freeMb  = getEffectiveFreeMemMb();
 
-    // ── Step 1: bulk install with retries ─────────────────────────────────
+    // Write onnxruntime-node CUDA-skip entries to both the project .npmrc and
+    // the user home .npmrc so npm forwards them to lifecycle scripts.
+    ensureNpmrc(cwd);
+
+    const npmEnv = {
+        ...process.env,
+        NODE_OPTIONS: `--max-old-space-size=${heapMb}`,
+        // Primary flag (onnxruntime-node v1.20+)
+        ONNXRUNTIME_NODE_INSTALL: 'skip',
+        npm_config_onnxruntime_node_install: 'skip',
+        'npm_config_onnxruntime-node-install': 'skip',
+        // Legacy CUDA-specific fallback (still checked in v1.24.3)
+        ONNXRUNTIME_NODE_INSTALL_CUDA: 'skip',
+        npm_config_onnxruntime_node_install_cuda: 'skip',
+        'npm_config_onnxruntime-node-install-cuda': 'skip',
+    };
+
+    const BASE_FLAGS = ['install', '--omit=optional', '--prefer-offline', '--no-audit', '--no-fund'];
+
+    if (isLowMemoryEnvironment()) {
+        console.log(`${context} Low-memory machine detected (${totalMb} MB total, ${freeMb} MB free, npm heap: ${heapMb} MB). Install may take multiple attempts...`);
+    }
+
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            console.log(`${context} Running npm install (attempt ${attempt}/${MAX_RETRIES}, npm heap: ${heapMb} MB)...`);
+            console.log(`${context} Running npm install (attempt ${attempt}/${MAX_RETRIES}, heap: ${heapMb} MB)...`);
             await spawnAsync('npm', BASE_FLAGS, { cwd, stdio: 'inherit', env: npmEnv });
             console.log(`${context} Dependencies installed successfully.\n`);
             return true;
         } catch (err) {
             console.warn(`${context} npm install attempt ${attempt} failed: ${err.message}`);
+
+            if (await checkDepsInstalled(cwd, npmEnv)) {
+                console.log(`${context} Install was interrupted but all packages are verified present. Continuing...\n`);
+                return true;
+            }
+
             if (attempt < MAX_RETRIES) {
                 console.log(`${context} Retrying in ${RETRY_DELAY_MS / 1000}s...`);
                 await sleep(RETRY_DELAY_MS);
@@ -540,81 +803,23 @@ async function robustNpmInstall(cwd, context) {
         }
     }
 
-    // ── Step 2: per-package fallback ──────────────────────────────────────
-    console.log(`\n${context} Bulk install failed. Switching to per-package mode to reduce peak memory...`);
-
-    const pkgPath = path.join(cwd, 'package.json');
-    if (!fs.existsSync(pkgPath)) {
-        console.error(`${context} package.json not found`);
-        return false;
+    // Final presence check after all retries are exhausted.
+    if (await checkDepsInstalled(cwd, npmEnv)) {
+        console.log(`${context} Packages verified present after final attempt. Continuing...\n`);
+        return true;
     }
 
-    let pkg;
-    try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')); }
-    catch (e) { console.error(`${context} Failed to parse package.json: ${e.message}`); return false; }
-
-    const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-
-    // Resume a previous crashed run
-    const progressFile = path.join(cwd, '.install-progress.json');
-    let installed = {};
-    if (fs.existsSync(progressFile)) {
-        try {
-            installed = JSON.parse(fs.readFileSync(progressFile, 'utf8'));
-            console.log(`${context} Resuming — ${Object.keys(installed).length} package(s) already done.`);
-        } catch { installed = {}; }
+    console.error(`${context} Failed to install all dependencies after ${MAX_RETRIES} attempts.`);
+    if (isLowMemoryEnvironment()) {
+        console.error(`${context} Container has ${totalMb} MB RAM — npm needs ~400 MB peak memory to resolve the full dependency tree.`);
+        console.error(`${context} Increase container RAM or run "npm install --omit=optional" manually on a higher-RAM machine.\n`);
+    } else {
+        console.error(`${context} Please run "npm install --omit=optional" manually to retry.\n`);
     }
-
-    const failed = [];
-
-    for (const [depName, depVersion] of Object.entries(allDeps)) {
-        if (installed[depName]) continue;
-
-        const pkg_spec = `${depName}@${depVersion}`;
-
-        // Heavy packages: always skip their optional blobs
-        const extraFlags = HEAVY_OPTIONAL_PACKAGES.has(depName)
-            ? ['--omit=optional', '--ignore-scripts']
-            : ['--omit=optional'];
-
-        let success = false;
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                process.stdout.write(`${context} Installing ${pkg_spec}... `);
-                await spawnAsync('npm', ['install', '--no-save', ...extraFlags, pkg_spec], {
-                    cwd, stdio: 'pipe', env: npmEnv
-                });
-                console.log('✓');
-                installed[depName] = true;
-                fs.writeFileSync(progressFile, JSON.stringify(installed, null, 2), 'utf8');
-                success = true;
-                break;
-            } catch {
-                if (attempt < MAX_RETRIES) {
-                    console.log(`(retry ${attempt})`);
-                    await sleep(2000 * attempt);
-                } else {
-                    console.log('✗');
-                }
-            }
-        }
-
-        if (!success) failed.push(depName);
-        if (global.gc) global.gc();
-        await sleep(0);
-    }
-
-    try { fs.unlinkSync(progressFile); } catch { /* ignore */ }
-
-    if (failed.length > 0) {
-        console.warn(`\n${context} Could not install: ${failed.join(', ')}`);
-        console.warn(`${context} Run "npm install --omit=optional" manually to retry.\n`);
-        return false;
-    }
-
-    console.log(`${context} All packages installed via per-package fallback.\n`);
-    return true;
+    return false;
 }
+
+
 
 
 // ============================================================
@@ -1326,8 +1531,12 @@ function setupCommandInterface() {
             }
 
             if (!newToken) {
-                // Prompt for token using the same readline
-                rl.question('Paste your bot token (input visible): ', async (answer) => {
+                // Print the instruction on its own line — container consoles
+                // (Pterodactyl, Docker) often don't echo typed characters,
+                // so the prompt must be visible above the input field.
+                console.log('');
+                console.log('Paste your Discord bot token below and press Enter:');
+                rl.question('> ', async (answer) => {
                     const token = answer && answer.trim();
                     if (!token) {
                         console.log('No token provided.');

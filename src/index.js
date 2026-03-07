@@ -210,7 +210,8 @@ async function ensureTokenAndLogin() {
 
     while (true) {
         if (!token) {
-            token = await question('Discord token missing — paste your bot token (input hidden not supported): ');
+            process.stdout.write('\nDiscord token missing — paste your bot token below and press Enter:\n');
+            token = await question('> ');
             token = token && token.trim() ? token.trim() : null;
             if (!token) continue;
             await updateTokenInEnv(token);
@@ -229,7 +230,8 @@ async function ensureTokenAndLogin() {
             console.error('Failed to login:', isInvalid ? 'Invalid token.' : error.message);
             if (isInvalid) {
                 // Ask user for a new token and persist it
-                token = await question('The provided token is invalid — please paste a valid token: ');
+                process.stdout.write('\nThe provided token is invalid — paste a valid bot token below and press Enter:\n');
+                token = await question('> ');
                 token = token && token.trim() ? token.trim() : null;
                 if (!token) continue;
                 await updateTokenInEnv(token);

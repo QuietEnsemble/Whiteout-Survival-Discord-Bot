@@ -50,9 +50,10 @@ const BROWSER_PROFILES = [
 /**
  * Generates randomized browser-like headers to avoid server-side bot detection.
  * Rotates browser type, version, OS, and related sec-* headers on every call.
+ * @param {string} [origin] - Origin URL override. Defaults to API_CONFIG.ORIGIN.
  * @returns {Object} Headers object
  */
-function generateBrowserHeaders() {
+function generateBrowserHeaders(origin = API_CONFIG.ORIGIN) {
     const profile = BROWSER_PROFILES[Math.floor(Math.random() * BROWSER_PROFILES.length)];
     const version = profile.versions[Math.floor(Math.random() * profile.versions.length)];
     const platform = profile.platforms[Math.floor(Math.random() * profile.platforms.length)];
@@ -60,8 +61,8 @@ function generateBrowserHeaders() {
     return {
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.7',
-        'Origin': API_CONFIG.ORIGIN,
-        'Referer': `${API_CONFIG.ORIGIN}/`,
+        'Origin': origin,
+        'Referer': `${origin}/`,
         'User-Agent': `Mozilla/5.0 (${platform.os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version}.0.0.0 Safari/537.36`,
         'sec-ch-ua': profile.buildSecUa(version),
         'sec-ch-ua-mobile': '?0',
@@ -109,14 +110,15 @@ function encodeData(data) {
  * Makes a POST request using node-fetch (for player API)
  * @param {string} url - API endpoint URL
  * @param {string} body - Signed form data string
+ * @param {string} [origin] - Origin URL for headers. Defaults to API_CONFIG.ORIGIN.
  * @returns {Promise<{status: number, data: Object}>} Response
  */
-async function fetchPost(url, body) {
+async function fetchPost(url, body, origin = API_CONFIG.ORIGIN) {
     const response = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            ...generateBrowserHeaders()
+            ...generateBrowserHeaders(origin)
         },
         body,
         // disable keep-alive and add a timeout so we don't hang on stale sockets
@@ -187,6 +189,12 @@ async function nativePost(url, payload, label) {
             });
         });
 
+        // Destroy the socket and reject if the server hangs for more than 15 seconds
+        req.setTimeout(15000, () => {
+            req.destroy();
+            reject(new Error(`${label} request timed out after 15 seconds`));
+        });
+
         req.on('error', (error) => {
             console.error(`${label} request failed:`, error.message);
             reject(error);
@@ -196,6 +204,145 @@ async function nativePost(url, payload, label) {
         req.end();
     });
 }
+
+/**
+ * Manages dual-API routing and rate limiting for player data fetching.
+ * Mirrors the Python LoginHandler dual-API approach: when both APIs are
+ * reachable, alternates between them (1 player/second). Falls back to
+ * single-API mode (1 player/2 seconds) when only one API is available.
+ */
+class PlayerApiManager {
+    constructor() {
+        /** @type {{url: string, origin: string}[]} index 0 = API 1, index 1 = API 2 */
+        this.apis = [
+            { url: API_CONFIG.PLAYER_URL,   origin: API_CONFIG.ORIGIN },
+            { url: API_CONFIG.PLAYER_URL_2, origin: API_CONFIG.ORIGIN_2 }
+        ];
+
+        // Per-API request timestamp windows (rolling 60-second window)
+        this.requestTimestamps = [[], []]; // index 0 = API 1, index 1 = API 2
+        this.rateLimitPerApi   = 30;
+        this.rateLimitWindow   = 60000; // ms
+
+        this.lastApiUsed  = 0; // index into this.apis
+        this.dualApiMode  = false;
+        this.availableApis = [0]; // indices of available apis (starts with API 1 only)
+        this.requestDelay  = 2000; // ms; updated by checkAvailability()
+    }
+
+    /**
+     * Probes both player API endpoints to determine availability.
+     * Updates dualApiMode and requestDelay accordingly.
+     * Should be called once at bot startup.
+     * @param {string} [testFid='46765089'] - Player FID used for availability probe
+     * @returns {Promise<void>}
+     */
+    async checkAvailability(testFid = '46765089') {
+        const results = await Promise.allSettled(
+            this.apis.map(async (api) => {
+                const body = buildPlayerPayload(testFid);
+                const response = await fetch(api.url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        ...generateBrowserHeaders(api.origin)
+                    },
+                    body,
+                    agent: api.url.startsWith('https') ? httpsAgent : httpAgent,
+                    timeout: 5000
+                });
+                // 200 (success) or 429 (rate limited) both mean the API is reachable
+                return response.status === 200 || response.status === 429;
+            })
+        );
+
+        const available = results.map((r) => r.status === 'fulfilled' && r.value === true);
+        this.availableApis = available.map((ok, i) => ok ? i : -1).filter(i => i !== -1);
+
+        if (this.availableApis.length >= 2) {
+            this.dualApiMode  = true;
+            this.requestDelay = 1000; // 1s — alternating across two APIs
+            console.log('[PlayerApiManager] Dual-API mode active (1 player/second)');
+        } else if (this.availableApis.length === 1) {
+            this.dualApiMode  = false;
+            this.requestDelay = 2000; // 2s — 30 req/min on single API
+            const unavailableIndex = this.availableApis[0] === 0 ? 1 : 0;
+            console.log(`[PlayerApiManager] Single-API mode — API ${unavailableIndex + 1} unavailable (1 player/2 seconds)`);
+        } else {
+            // No APIs reachable; fall back to API 1 with conservative delay
+            this.availableApis = [0];
+            this.dualApiMode   = false;
+            this.requestDelay  = 2000;
+            console.warn('[PlayerApiManager] No player APIs reachable — defaulting to API 1');
+        }
+    }
+
+    /**
+     * Returns the next API endpoint info, respecting rate limits and alternation.
+     * Records the request timestamp automatically.
+     * @returns {{url: string, origin: string}}
+     */
+    getNextApi() {
+        const now = Date.now();
+
+        // Clean stale timestamps outside the rolling window
+        for (let i = 0; i < 2; i++) {
+            this.requestTimestamps[i] = this.requestTimestamps[i].filter(t => now - t < this.rateLimitWindow);
+        }
+
+        let selectedIndex;
+
+        if (this.dualApiMode) {
+            // Prefer the API that wasn't used last; fall back if at rate limit
+            const candidates = this.availableApis.filter(
+                i => this.requestTimestamps[i].length < this.rateLimitPerApi
+            );
+            if (candidates.length >= 2) {
+                // Both have capacity — alternate
+                selectedIndex = candidates.find(i => i !== this.lastApiUsed) ?? candidates[0];
+            } else if (candidates.length === 1) {
+                selectedIndex = candidates[0];
+            } else {
+                // Both at limit — fall back to API 1 (caller's rate limit handling kicks in)
+                selectedIndex = 0;
+            }
+        } else {
+            // Single-API mode: always use the first available
+            const available = this.availableApis.find(
+                i => this.requestTimestamps[i].length < this.rateLimitPerApi
+            );
+            selectedIndex = available ?? this.availableApis[0] ?? 0;
+        }
+
+        this.requestTimestamps[selectedIndex].push(now);
+        this.lastApiUsed = selectedIndex;
+        return this.apis[selectedIndex];
+    }
+
+    /**
+     * Returns the current inter-request delay in milliseconds.
+     * 1000ms in dual-API mode, 2000ms in single-API mode.
+     * @returns {number}
+     */
+    getRequestDelay() {
+        return this.requestDelay;
+    }
+
+    /**
+     * Returns a human-readable description of the current API mode.
+     * @returns {string}
+     */
+    getModeDescription() {
+        if (this.dualApiMode) {
+            return 'Dual-API mode active (1 player/second)';
+        }
+        const unavailable = this.availableApis[0] === 0 ? 2 : 1;
+        return `Single-API mode (1 player/2 seconds) — API ${unavailable} unavailable`;
+    }
+}
+
+/** Singleton instance shared across the entire bot process. */
+const playerApiManager = new PlayerApiManager();
 
 /**
  * Fetches player data from the game API with retry logic
@@ -214,7 +361,8 @@ async function fetchPlayerData(playerId, options = {}) {
     while (retries < API_CONFIG.MAX_RETRIES) {
         try {
             const body = buildPlayerPayload(playerId);
-            const { data } = await fetchPost(API_CONFIG.API_URL, body);
+            const { url: apiUrl, origin: apiOrigin } = playerApiManager.getNextApi();
+            const { data } = await fetchPost(apiUrl, body, apiOrigin);
 
             // Check for player not exist
             if (data.err_code === 40001 || data.msg === 'ROLE NOT EXIST' || data.msg === 'ROLE NOT EXIST.') {
@@ -277,5 +425,6 @@ module.exports = {
     encodeData,
     fetchPost,
     nativePost,
-    fetchPlayerData
+    fetchPlayerData,
+    playerApiManager
 };

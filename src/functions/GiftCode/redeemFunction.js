@@ -72,11 +72,17 @@ const ERROR_CODE_TO_STATUS = {
     40103: 'CAPTCHA CHECK ERROR'
 };
 
-// Captcha rate limiter to prevent hitting API rate limits
-// Tracks the last captcha fetch timestamp globally across all processes
-let lastCaptchaFetchTime = 0;
-
-const processCompletionResolvers = new Map();
+// Persistent module state — stored on global so values survive hot-reloads.
+// A plain module-level variable would reset to 0 / an empty Map every time
+// `reload files` re-requires this module, causing captcha rate-limit violations
+// and hanging completion promises.
+if (!global._wosRedeemModuleState) {
+    global._wosRedeemModuleState = {
+        lastCaptchaFetchTime: 0,
+        processCompletionResolvers: new Map()
+    };
+}
+const moduleState = global._wosRedeemModuleState;
 
 class CaptchaSolver {
     constructor() {
@@ -217,15 +223,15 @@ function fileExists(targetPath) {
 
 function registerProcessCompletion(processId) {
     return new Promise((resolve) => {
-        processCompletionResolvers.set(processId, resolve);
+        moduleState.processCompletionResolvers.set(processId, resolve);
     });
 }
 
 function resolveProcessCompletion(processId, payload) {
-    const resolver = processCompletionResolvers.get(processId);
+    const resolver = moduleState.processCompletionResolvers.get(processId);
     if (resolver) {
         resolver(payload);
-        processCompletionResolvers.delete(processId);
+        moduleState.processCompletionResolvers.delete(processId);
     }
 }
 
@@ -608,10 +614,17 @@ async function createRedeemProcess(redeemData, options = {}) {
  * @param {string} giftCode - Gift code being redeemed
  * @param {Object} outcome - Redeem outcome with status
  */
-async function handleVipTracking(playerId, giftCode, outcome) {
+/**
+ * Handles VIP tracking for VIP/Recharge restricted gift codes
+ * @param {string} playerId - Player FID
+ * @param {string} giftCode - Gift code being redeemed
+ * @param {Object} outcome - Redeem outcome with status
+ * @param {Object|null} [cachedGiftCodeData=null] - Pre-fetched gift code row; falls back to a DB query if not provided
+ */
+async function handleVipTracking(playerId, giftCode, outcome, cachedGiftCodeData = null) {
     try {
-        // Check if this is a VIP/Recharge restricted code
-        const giftCodeData = giftCodeQueries.getGiftCode(giftCode);
+        // Use the pre-fetched row when available to avoid repeated DB reads in the loop
+        const giftCodeData = cachedGiftCodeData ?? giftCodeQueries.getGiftCode(giftCode);
         if (!giftCodeData || !giftCodeData.is_vip) {
             return; // Not a VIP code, no tracking needed
         }
@@ -664,10 +677,11 @@ async function handleVipTracking(playerId, giftCode, outcome) {
  * @param {string} playerId - Player FID
  * @param {string} giftCode - Gift code that was redeemed
  * @param {Object} outcome - Redemption outcome with status
+ * @param {Object|null} [cachedGiftCodeData=null] - Pre-fetched gift code row (avoids repeated DB reads per player)
  */
-async function handlePostRedemption(playerId, giftCode, outcome) {
+async function handlePostRedemption(playerId, giftCode, outcome, cachedGiftCodeData = null) {
     // Handle VIP tracking for VIP/Recharge codes
-    await handleVipTracking(playerId, giftCode, outcome);
+    await handleVipTracking(playerId, giftCode, outcome, cachedGiftCodeData);
 
     // Track gift code usage for this player
     try {
@@ -814,6 +828,11 @@ async function executeRedeemOperation(processId) {
         let vipCodeDetected = false;
         let vipCodeDetectedAt = null;
 
+        // Fetch gift code data once for the entire loop — passed to handlePostRedemption
+        // to avoid 1 DB read per player for the same unchanging row.
+        // Declared with let so it can be updated if VIP status is detected dynamically.
+        let loopGiftCodeData = giftCodeQueries.getGiftCode(redeemContext.giftCode) || null;
+
         // Process only items that are still pending (handles crash recovery correctly)
         // This prevents re-processing items that were already completed before a crash
         const itemsToProcess = redeemContext.items.filter((item) => {
@@ -872,6 +891,10 @@ async function executeRedeemOperation(processId) {
                 // Update gift code to VIP in database
                 try {
                     giftCodeQueries.updateGiftCodeVipStatus(true, item.giftCode);
+                    // Sync the in-loop cache so subsequent players get VIP-tracked correctly
+                    loopGiftCodeData = loopGiftCodeData
+                        ? { ...loopGiftCodeData, is_vip: 1 }
+                        : { is_vip: 1 };
                 } catch (updateError) {
                     await handleError(null, null, updateError, 'updateGiftCodeVipStatus', false);
                 }
@@ -956,7 +979,7 @@ async function executeRedeemOperation(processId) {
 
             // Handle post-redemption operations (VIP tracking + usage tracking)
             if (item.status === 'redeem' && item.id) {
-                await handlePostRedemption(item.id, item.giftCode, outcome);
+                await handlePostRedemption(item.id, item.giftCode, outcome, loopGiftCodeData);
             }
 
             current.pending = current.pending.filter((value) => value !== identifier);
@@ -1031,8 +1054,10 @@ async function executeRedeemOperation(processId) {
                 const processingEndTime = Date.now();
                 const elapsedTime = processingEndTime - processingStartTime;
 
-                // Calculate remaining delay needed to reach 2 seconds minimum
-                const remainingDelay = Math.max(0, API_CONFIG.BETWEEN_REDEMPTIONS_DELAY - elapsedTime);
+                // Randomised inter-player delay
+                const targetDelay = API_CONFIG.MEMBER_PROCESS_DELAY_MIN +
+                    Math.random() * (API_CONFIG.MEMBER_PROCESS_DELAY_MAX - API_CONFIG.MEMBER_PROCESS_DELAY_MIN);
+                const remainingDelay = Math.max(0, targetDelay - elapsedTime);
 
                 if (remainingDelay > 0) {
                     await wait(remainingDelay);
@@ -1282,7 +1307,7 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
     let lastResult = null;
     let consecutiveRateLimits = 0;
     let authRetryCount = 0;
-    const MAX_CONSECUTIVE_RATE_LIMITS = 2; // Give up after 2 consecutive rate limits
+    const MAX_CONSECUTIVE_RATE_LIMITS = 10;
     const MAX_AUTH_RETRIES = 2; // Maximum auth retries to prevent infinite loops
 
     while (attempt < API_CONFIG.MAX_CAPTCHA_ATTEMPTS) {
@@ -1292,17 +1317,17 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
         // Rate limit captcha fetches to prevent API rate limit errors
         // Ensure minimum delay between captcha fetch requests across all players
         const now = Date.now();
-        const timeSinceLastFetch = now - lastCaptchaFetchTime;
+        const timeSinceLastFetch = now - moduleState.lastCaptchaFetchTime;
         const minDelayBetweenFetches = API_CONFIG.BETWEEN_REDEMPTIONS_DELAY;
 
-        if (lastCaptchaFetchTime > 0 && timeSinceLastFetch < minDelayBetweenFetches) {
+        if (moduleState.lastCaptchaFetchTime > 0 && timeSinceLastFetch < minDelayBetweenFetches) {
             const waitTime = minDelayBetweenFetches - timeSinceLastFetch;
             await wait(waitTime);
             timings.delays += waitTime;
         }
 
         // Update last fetch time before fetching (not after) to prevent concurrent fetches
-        lastCaptchaFetchTime = Date.now();
+        moduleState.lastCaptchaFetchTime = Date.now();
 
         const captchaFetchStart = Date.now();
         const captchaResult = await fetchCaptchaImage(fid);
@@ -1354,12 +1379,7 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
                     );
                 }
 
-                // Exponential backoff: increase delay for consecutive rate limits
-                const backoffMultiplier = Math.pow(1.5, consecutiveRateLimits - 1);
-                const adjustedDelay = Math.min(
-                    statusConfig.retry.delay * backoffMultiplier,
-                    120000 // Cap at 2 minutes
-                );
+                const adjustedDelay = statusConfig.retry.delay ?? API_CONFIG.RATE_LIMIT_DELAY;
 
                 // console.warn(`Captcha rate limited for FID ${fid} (attempt ${consecutiveRateLimits}/${MAX_CONSECUTIVE_RATE_LIMITS}), waiting ${Math.round(adjustedDelay)}ms...`);
                 lastResult = {

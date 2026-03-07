@@ -2633,7 +2633,9 @@
         "notForYou": "{emoji.1050} Cette interaction n'est pas pour vous.",
         "noPermission": "{emoji.1050} Vous n'avez pas la permission d'effectuer cette action.",
         "error": "{emoji.1050} Une erreur est survenue. Veuillez réessayer plus tard.",
-        "furnaceCrystal": "FC"
+        "furnaceCrystal": "FC",
+        "botMissingPermissions": "{emoji.1050} Il me manque les permissions suivantes dans ce canal : {permissions}. Veuillez m'accorder ces permissions pour que le bot fonctionne correctement.",
+        "botMissingChannelPermissions": "{emoji.1050} Permissions manquantes ({permissions}) dans <#{channelId}>. Les mises à jour de progression ne s'afficheront pas là-bas — veuillez accorder ces permissions au bot."
     },
     "logs": {
         "alliance": {

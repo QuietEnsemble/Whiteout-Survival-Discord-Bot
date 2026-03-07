@@ -5,7 +5,7 @@ const languages = require('../../i18n');
 const { handleError, getUserInfo } = require('../utility/commonFunctions');
 const { getComponentEmoji, getGlobalEmojiMap } = require('../utility/emojis');
 const { API_CONFIG } = require('../utility/apiConfig');
-const { fetchPlayerData: fetchPlayerFromAPIShared } = require('../utility/apiClient');
+const { fetchPlayerData: fetchPlayerFromAPIShared, playerApiManager } = require('../utility/apiClient');
 
 /**
  * Player data fetching and processing
@@ -295,8 +295,8 @@ class PlayerDataProcessor {
                             processingState.processed++;
                             success = true;
 
-                            // Add 2 second delay between API calls to avoid rate limiting (30 requests/min max)
-                            await this.delay(2000);
+                            // Delay between API calls: 1s (dual-API mode) or 2s (single-API mode)
+                            await this.delay(playerApiManager.getRequestDelay());
 
                         } catch (error) {
                             // Handle rate limiting

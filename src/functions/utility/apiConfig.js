@@ -8,15 +8,19 @@ const API_CONFIG = {
     SECRET: 'tB87#kPtkxqOS2',
     API_URL: 'https://wos-giftcode-api.centurygame.com/api/player', // Alias for PLAYER_URL
     PLAYER_URL: 'https://wos-giftcode-api.centurygame.com/api/player',
+    PLAYER_URL_2: 'https://gof-report-api-formal.centurygame.com/api/player',
     GIFT_CODE_URL: 'https://wos-giftcode-api.centurygame.com/api/gift_code',
     CAPTCHA_URL: 'https://wos-giftcode-api.centurygame.com/api/captcha',
     ORIGIN: 'https://wos-giftcode.centurygame.com',
+    ORIGIN_2: 'https://gof-report-api-formal.centurygame.com',
     RATE_LIMIT_DELAY: 60000, // 60 seconds
     RETRY_DELAY: 3000, // 3 seconds
     MAX_RETRIES: 3,
     MAX_CAPTCHA_ATTEMPTS: 5,
     UPDATE_INTERVAL: 10, // Update embed every 10 processed players
-    BETWEEN_REDEMPTIONS_DELAY: 2050 // 2.05 second delay between each player redemption
+    BETWEEN_REDEMPTIONS_DELAY: 1000, // 1s minimum spacing between captcha fetch requests
+    MEMBER_PROCESS_DELAY_MIN: 700,   // min inter-player delay ms 
+    MEMBER_PROCESS_DELAY_MAX: 1300   // max inter-player delay ms 
 };
 
 const GIFT_CODE_API_CONFIG = {

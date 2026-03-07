@@ -1,5 +1,5 @@
 const { adminQueries, userQueries, systemLogQueries, settingsQueries } = require('./database');
-const { SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
+const { SeparatorBuilder, SeparatorSpacingSize, PermissionFlagsBits } = require('discord.js');
 const languages = require('../../i18n');
 const { getEmojiMapForUser, wrapLangWithEmojis, getComponentEmoji } = require('./emojis');
 const path = require('path');
@@ -568,6 +568,30 @@ function checkCustomIdLength(customId, maxLength = 100) {
     return customId.length <= maxLength;
 }
 
+/** Permissions required for the bot to send embed messages in a guild channel. */
+const CHANNEL_SEND_PERMISSIONS = [
+    { flag: PermissionFlagsBits.ViewChannel,  name: 'View Channel' },
+    { flag: PermissionFlagsBits.SendMessages, name: 'Send Messages' },
+    { flag: PermissionFlagsBits.EmbedLinks,   name: 'Embed Links' },
+];
+
+/**
+ * Returns missing permission names for the bot in a given guild channel.
+ * Returns an empty array if all required permissions are present or inputs are invalid.
+ * @param {import('discord.js').GuildChannel} channel - The target channel to check
+ * @returns {string[]}
+ */
+function getChannelMissingBotPermissions(channel) {
+    if (!channel?.guild) return [];
+    const botMember = channel.guild.members.me;
+    if (!botMember) return [];
+    const perms = channel.permissionsFor(botMember);
+    if (!perms) return [];
+    return CHANNEL_SEND_PERMISSIONS
+        .filter(({ flag }) => !perms.has(flag))
+        .map(({ name }) => name);
+}
+
 module.exports = {
     getUserInfo,
     assertUserMatches,
@@ -582,5 +606,6 @@ module.exports = {
     getRefreshTimeout,
     encodeExportSelection,
     decodeExportSelection,
-    checkCustomIdLength
+    checkCustomIdLength,
+    getChannelMissingBotPermissions
 };

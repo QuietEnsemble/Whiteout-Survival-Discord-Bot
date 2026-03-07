@@ -7,7 +7,7 @@ const { getFurnaceReadable } = require('../Players/furnaceReadable');
 const { handleError, getRefreshTimeout, formatRefreshInterval } = require('../utility/commonFunctions');
 const { replaceEmojiPlaceholders, getGlobalEmojiMap } = require('./../utility/emojis');
 const { API_CONFIG } = require('../utility/apiConfig');
-const { fetchPlayerData: fetchPlayerFromAPIShared } = require('../utility/apiClient');
+const { fetchPlayerData: fetchPlayerFromAPIShared, playerApiManager } = require('../utility/apiClient');
 
 /**
  * Auto-refresh system for alliance data monitoring
@@ -336,8 +336,8 @@ class AutoRefreshManager {
                         await this.movePlayerToStatus(processId, playerId, 'pending', 'done');
                         unchanged++; // Count as processed but unchanged
                         processed++;
-                        // Add 2 second delay after player check (30 requests/min limit)
-                        await this.delay(2000);
+                        // Delay: 1s (dual-API mode) or 2s (single-API mode)
+                        await this.delay(playerApiManager.getRequestDelay());
                         continue;
                     }
 
@@ -347,8 +347,8 @@ class AutoRefreshManager {
                         await this.movePlayerToStatus(processId, playerId, 'pending', 'failed');
                         failed++;
                         processed++;
-                        // Add 2 second delay after failed fetch before moving to next player (30 requests/min limit)
-                        await this.delay(2000);
+                        // Delay: 1s (dual-API mode) or 2s (single-API mode)
+                        await this.delay(playerApiManager.getRequestDelay());
                         continue;
                     }
 
@@ -387,8 +387,8 @@ class AutoRefreshManager {
 
                     processed++;
 
-                    // Small delay between API calls (2s = 30 requests/min max)
-                    await this.delay(2000);
+                    // Delay: 1s (dual-API mode) or 2s (single-API mode)
+                    await this.delay(playerApiManager.getRequestDelay());
                 } catch (error) {
                     if (error.message === 'RATE_LIMIT') {
                         await this.delay(API_CONFIG.RATE_LIMIT_DELAY);
@@ -401,8 +401,8 @@ class AutoRefreshManager {
                         await this.movePlayerToStatus(processId, playerId, 'pending', 'failed');
                         failed++;
                         processed++;
-                        // Add 2 second delay after general error (30 requests/min limit)
-                        await this.delay(2000);
+                        // Delay: 1s (dual-API mode) or 2s (single-API mode)
+                        await this.delay(playerApiManager.getRequestDelay());
                     }
                 }
             }

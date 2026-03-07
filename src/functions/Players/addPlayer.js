@@ -18,7 +18,7 @@ const { allianceQueries } = require('../utility/database');
 const { createProcess, updateProcessProgress, getProcessById } = require('../Processes/createProcesses');
 const { queueManager } = require('../Processes/queueManager');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
-const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents } = require('../utility/commonFunctions');
+const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator, createAllianceSelectionComponents, getChannelMissingBotPermissions } = require('../utility/commonFunctions');
 const { parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 
@@ -386,6 +386,7 @@ async function handlePlayerIdModal(interaction) {
         if (alliance.channel_id) {
             try {
                 targetChannel = await interaction.client.channels.fetch(alliance.channel_id);
+                if (!targetChannel) targetChannel = interaction.channel;
             } catch (error) {
                 await handleError(null, lang, error, 'fetchAllianceChannel', false);
                 targetChannel = interaction.channel;
@@ -394,19 +395,39 @@ async function handlePlayerIdModal(interaction) {
             targetChannel = interaction.channel;
         }
 
+        // Check bot permissions in the target channel before attempting to send
+        let channelPermissionWarning = '';
+        if (targetChannel?.guild) {
+            const missingPerms = getChannelMissingBotPermissions(targetChannel);
+            if (missingPerms.length > 0) {
+                const permList = missingPerms.map(p => `\`${p}\``).join(', ');
+                channelPermissionWarning = '\n' + lang.common.botMissingChannelPermissions
+                    .replace('{permissions}', permList)
+                    .replace('{channelId}', targetChannel.id);
+            }
+        }
+
         // Send a non-ephemeral message in the target channel for progress updates
         // Can't use editReply because ephemeral messages get deleted
-        const responseMessage = await targetChannel.send({
-            embeds: [responseEmbed]
-        });
+        let responseMessage = null;
+        if (targetChannel && !channelPermissionWarning) {
+            try {
+                responseMessage = await targetChannel.send({
+                    embeds: [responseEmbed]
+                });
+            } catch (sendError) {
+                await handleError(null, lang, sendError, 'sendProcessEmbed', false);
+            }
+        }
 
         // Send ephemeral confirmation to user
-        const channelMention = targetChannel.id === interaction.channel.id
+        const channelMention = targetChannel?.id === interaction.channel?.id
             ? lang.players.addPlayer.content.currentChannel
-            : `<#${targetChannel.id}>`;
+            : `<#${targetChannel?.id}>`;
 
         await interaction.editReply({
-            content: lang.players.addPlayer.content.processStarted.replace('{channelMention}', channelMention),
+            content: lang.players.addPlayer.content.processStarted.replace('{channelMention}', channelMention)
+                + channelPermissionWarning,
             ephemeral: true
         });
 
