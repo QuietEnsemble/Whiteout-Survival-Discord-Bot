@@ -305,8 +305,8 @@ const buttonHandlers = [
     { pattern: /^schedule_board_send_/, fn: scheduleView.handleScheduleBoardSend },
     { pattern: /^schedule_edit_/, fn: scheduleView.handleScheduleEditButton },
     { pattern: /^schedule_type_/, fn: scheduleView.handleScheduleTypeSelection },
+    { pattern: /^schedule_view_(prev|next)_/, fn: scheduleView.handleScheduleViewPagination },
     { pattern: /^schedule_view_/, fn: scheduleView.handleScheduleViewButton },
-    { pattern: /^pagination_schedule_view_/, fn: scheduleView.handleScheduleViewPagination },
 
     // Calculators
     { pattern: /^calc_main_panel_/, fn: calculators.handleCalcMainPanel },
