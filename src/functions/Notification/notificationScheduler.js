@@ -229,6 +229,23 @@ class NotificationScheduler {
         const pattern = notification.pattern || 'time';
         const sendTimes = this.calculateSendTimes(scheduledTime, pattern);
 
+        // setTimeout uses a 32-bit signed int for delay (max ~24.8 days).
+        // Delays exceeding this overflow to 1 ms, firing immediately.
+        // If the earliest send time is beyond the safe limit, schedule a
+        // re-check instead of the actual send.
+        const MAX_TIMEOUT_MS = 2_147_483_647; // 2^31 - 1
+        const earliestFutureSend = sendTimes.find(t => t > currentTime);
+        if (earliestFutureSend && (earliestFutureSend - currentTime) * 1000 > MAX_TIMEOUT_MS) {
+            const recheckId = setTimeout(() => {
+                if (this.scheduleGenerations.get(notificationId) !== generationId) return;
+                const fresh = notificationQueries.getNotificationById(notificationId);
+                if (fresh && fresh.is_active) {
+                    this.scheduleNotification(fresh);
+                }
+            }, MAX_TIMEOUT_MS);
+            this.scheduledNotifications.set(notificationId, [recheckId]);
+            return;
+        }
 
         const timeoutIds = [];
         let hasValidSchedule = false;
@@ -349,7 +366,7 @@ class NotificationScheduler {
     async sendNotification(notification, sendTime, scheduledTime, isLastSend) {
         try {
             // Check if client is available and ready
-            if (!this.client || !this.client.isReady()) {
+            if (!this.client || !this.client.isReady() || !this.client.token) {
                 console.error(`Discord client not available for notification ${notification.id}`);
                 return;
             }
@@ -544,6 +561,12 @@ class NotificationScheduler {
                 this.scheduleNotification(updatedNotification);
             }
 
+            // Update any schedule boards for this guild
+            if (notification.guild_id) {
+                const { updateBoardsForGuild } = require('./scheduleView');
+                updateBoardsForGuild(notification.guild_id, this.client).catch(() => {});
+            }
+
         } catch (error) {
             await handleError(null, null, error, 'NotificationScheduler.handleNotificationCompletion');
         }
@@ -567,6 +590,12 @@ class NotificationScheduler {
             }
 
             this.scheduleNotification(notification);
+
+            // Update any schedule boards for this guild
+            if (notification.guild_id) {
+                const { updateBoardsForGuild } = require('./scheduleView');
+                updateBoardsForGuild(notification.guild_id, this.client).catch(() => {});
+            }
 
         } catch (error) {
             await handleError(null, null, error, 'NotificationScheduler.addNotification');

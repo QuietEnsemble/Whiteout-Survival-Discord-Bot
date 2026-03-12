@@ -1278,6 +1278,13 @@ async function reloadAllFiles() {
         failCount++;
     }
 
+    // Cleanup old notification scheduler timeouts BEFORE cache clear
+    // (cache clear creates a new singleton, orphaning old timeouts)
+    try {
+        const oldScheduler = require(path.join(SRC_DIR, 'functions', 'Notification', 'notificationScheduler'));
+        if (oldScheduler.notificationScheduler) oldScheduler.notificationScheduler.cleanup();
+    } catch { /* ignore — scheduler may not be loaded yet */ }
+
     // Clear cache for all other files in src
     for (const fullPath of fileMap.values()) {
         clearCache(fullPath);

@@ -13,6 +13,7 @@ const { createNotificationButton } = require('./createNotification');
 const { createEditNotificationButton } = require('./editNotification');
 const { createDeleteNotificationButton } = require('./deleteNotification');
 const { createTemplateLibraryButton } = require('./templateLibrary');
+const { createScheduleViewButton } = require('./scheduleView');
 const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
 const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 const { checkFeatureAccess } = require('../utility/checkAccess');
@@ -50,11 +51,13 @@ function createNotificationContainer(interaction) {
     const editNotificationButtonInstance = createEditNotificationButton(interaction.user.id, lang);
     const deleteNotificationButtonInstance = createDeleteNotificationButton(interaction.user.id, lang);
     const templateLibraryButtonInstance = createTemplateLibraryButton(interaction.user.id, lang);
+    const scheduleViewButtonInstance = createScheduleViewButton(interaction.user.id, lang);
 
     if (!hasServerPermission && !hasPrivateFeature) {
         createNotificationButtonInstance.setDisabled(true);
         editNotificationButtonInstance.setDisabled(true);
-        deleteNotificationButtonInstance.setDisabled(true)
+        deleteNotificationButtonInstance.setDisabled(true);
+        scheduleViewButtonInstance.setDisabled(true);
     }
 
 
@@ -63,7 +66,12 @@ function createNotificationContainer(interaction) {
             createNotificationButtonInstance,
             editNotificationButtonInstance,
             deleteNotificationButtonInstance,
-            templateLibraryButtonInstance,
+            templateLibraryButtonInstance
+        );
+
+    const actionRow2 = new ActionRowBuilder()
+        .addComponents(
+            scheduleViewButtonInstance,
             returnedBackButton
         );
 
@@ -85,14 +93,18 @@ function createNotificationContainer(interaction) {
                     `${lang.notification.mainPage.content.deleteNotificationField.value}\n` +
 
                     `${lang.notification.mainPage.content.templateLibraryField.name}\n` +
-                    `${lang.notification.mainPage.content.templateLibraryField.value}\n`
+                    `${lang.notification.mainPage.content.templateLibraryField.value}\n` +
+
+                    `${lang.notification.mainPage.content.scheduleViewField.name}\n` +
+                    `${lang.notification.mainPage.content.scheduleViewField.value}\n`
                 )
             )
             .addSeparatorComponents(
                 new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
             )
             .addActionRowComponents(
-                actionRow
+                actionRow,
+                actionRow2
             )
     ];
 

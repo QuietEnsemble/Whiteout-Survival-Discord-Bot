@@ -25,7 +25,7 @@ const ITEMS_PER_PAGE = 20;
 function createDeleteNotificationButton(userId, lang) {
     return new ButtonBuilder()
         .setCustomId(`notification_delete_${userId}`)
-        .setLabel(lang.notification.deleteNotification.buttons.deleteNotification)
+        .setLabel(lang.notification.mainPage.buttons.deleteNotification)
         .setStyle(ButtonStyle.Secondary)
         .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1046'));
 }
@@ -411,6 +411,12 @@ async function handleDeleteConfirm(interaction) {
 
         // Then delete from database
         notificationQueries.deleteNotification(id);
+
+        // Update schedule boards if server notification
+        if (notification.guild_id) {
+            const { updateBoardsForGuild } = require('./scheduleView');
+            updateBoardsForGuild(notification.guild_id, interaction.client).catch(() => {});
+        }
 
         // Log the deletion
         adminLogQueries.addLog(

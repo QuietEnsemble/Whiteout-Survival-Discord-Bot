@@ -41,11 +41,13 @@ async function initializeIdChannelCache() {
 
         global.idChannelCache.clear();
         allIdChannels.forEach(channel => {
-            global.idChannelCache.set(channel.channel_id, {
+            const existing = global.idChannelCache.get(channel.channel_id) || [];
+            existing.push({
                 alliance_id: channel.alliance_id,
                 guild_id: channel.guild_id,
                 id: channel.id
             });
+            global.idChannelCache.set(channel.channel_id, existing);
         });
 
     } catch (error) {
@@ -55,13 +57,15 @@ async function initializeIdChannelCache() {
 }
 
 /**
- * Updates the cache when ID channels are added/removed
- * @param {string} channelId - Channel ID
- * @param {Object|null} data - Channel data or null to remove
+ * Updates the cache when an ID channel is added
+ * @param {string} channelId - Discord channel ID
+ * @param {Object|null} data - Channel data to add, or null to remove all entries
  */
 function updateIdChannelCache(channelId, data) {
     if (data) {
-        global.idChannelCache.set(channelId, data);
+        const existing = global.idChannelCache.get(channelId) || [];
+        existing.push(data);
+        global.idChannelCache.set(channelId, existing);
 
         // Evict oldest entries if cache exceeds maximum size
         while (global.idChannelCache.size > MAX_ID_CHANNEL_CACHE_SIZE) {
@@ -71,6 +75,23 @@ function updateIdChannelCache(channelId, data) {
         }
     } else {
         global.idChannelCache.delete(channelId);
+    }
+}
+
+/**
+ * Removes a specific entry from the cache by database ID
+ * @param {string} channelId - Discord channel ID
+ * @param {number} dbId - Database row ID to remove
+ */
+function removeFromIdChannelCache(channelId, dbId) {
+    const existing = global.idChannelCache.get(channelId);
+    if (!existing) return;
+
+    const filtered = existing.filter(e => e.id !== dbId);
+    if (filtered.length === 0) {
+        global.idChannelCache.delete(channelId);
+    } else {
+        global.idChannelCache.set(channelId, filtered);
     }
 }
 
@@ -538,8 +559,8 @@ async function handleIdChannelRemoveSelect(interaction) {
         // Remove from database
         idChannelQueries.removeIdChannel(selectedId);
 
-        // Update cache
-        updateIdChannelCache(channelData.channel_id, null);
+        // Update cache - remove only this specific entry
+        removeFromIdChannelCache(channelData.channel_id, selectedId);
 
         // Log the action
         adminLogQueries.addLog(
@@ -698,16 +719,13 @@ async function handleIdChannelSelect(interaction) {
             });
         }
 
-        // Check if this channel is already linked to ANY alliance
-        const existingChannel = idChannelQueries.getChannelByChannelId(selectedChannel.id);
-        if (existingChannel) {
-            const existingAlliance = allianceQueries.getAllianceById(existingChannel.alliance_id);
-            const existingAllianceName = existingAlliance ? existingAlliance.name : 'Unknown Alliance';
-
+        // Check if this specific alliance is already linked to this channel
+        const existingChannels = idChannelQueries.getChannelsByChannelId(selectedChannel.id);
+        if (existingChannels.some(ch => ch.alliance_id === allianceId)) {
             return await interaction.reply({
                 content: lang.players.idChannel.errors.channelAlreadyLinked
                     .replace('{channel}', `<#${selectedChannel.id}>`)
-                    .replace('{alliance}', existingAllianceName),
+                    .replace('{alliance}', alliance.name),
                 ephemeral: true
             });
         }
@@ -770,6 +788,7 @@ async function handleIdChannelSelect(interaction) {
 
 /**
  * Handles messages in ID channels - USES PROCESS SYSTEM
+ * Supports multiple alliances linked to the same channel
  * @param {import('discord.js').Message} message 
  */
 async function handleIdChannelMessage(message) {
@@ -781,28 +800,17 @@ async function handleIdChannelMessage(message) {
 
     try {
         // Check cache first (no DB query for non-ID channels)
-        const channelData = global.idChannelCache.get(message.channel.id);
-        if (!channelData) return; // Not an ID channel
-
-        // Get alliance from cache (avoid DB query)
-        const alliance = allianceQueries.getAllianceById(channelData.alliance_id);
-        if (!alliance) {
-            console.error(`Alliance not found for cached ID channel: ${channelData.alliance_id}`);
-            return;
-        }
+        const channelEntries = global.idChannelCache.get(message.channel.id);
+        if (!channelEntries || channelEntries.length === 0) return; // Not an ID channel
 
         // Sanitize and validate player IDs from message
         const sanitizedPlayerIds = sanitizePlayerIds(message.content);
+        if (!sanitizedPlayerIds) return; // Invalid format - ignore silently
 
-        if (!sanitizedPlayerIds) {
-            // Invalid format - ignore silently
-            return;
-        }
-
-        // Check if ALL players already exist (for early exit embed only)
+        // Early check: if ALL players already exist, show embed immediately (skip alliance selection)
         const playerIdsArray = sanitizedPlayerIds.split(',');
-        const existingPlayers = [];
         const { playerQueries } = require('../utility/database');
+        const existingPlayers = [];
 
         for (const playerId of playerIdsArray) {
             const existingPlayer = playerQueries.getPlayer(playerId);
@@ -815,16 +823,13 @@ async function handleIdChannelMessage(message) {
             }
         }
 
-        // If ALL players already exist, show embed and return (no process needed)
         if (existingPlayers.length === playerIdsArray.length && existingPlayers.length > 0) {
-            // React with info emoji to indicate all exist
             await message.react(emojiMap['1017'] || 'ℹ️');
 
-            // Send brief response
             const embed = new EmbedBuilder()
                 .setTitle(lang.players.idChannel.content.title.allExist)
                 .setDescription(lang.players.idChannel.content.description.allExist)
-                .setColor(0xffa500) // Orange
+                .setColor(0xffa500)
                 .addFields([
                     {
                         name: lang.players.idChannel.content.existingPlayersField.name,
@@ -833,51 +838,278 @@ async function handleIdChannelMessage(message) {
                             .replace('{id}', p.id)
                             .replace('{alliance}', p.alliance)
                         ).join('\n').slice(0, 1024),
-
                     }
                 ])
                 .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL() })
                 .setTimestamp();
 
             await message.reply({ embeds: [embed] });
-
             return;
         }
 
-        // React to message to show processing
-        await message.react('⏳');
+        // Get valid alliances from cache entries
+        const alliances = channelEntries
+            .map(entry => allianceQueries.getAllianceById(entry.alliance_id))
+            .filter(Boolean);
 
-        // Create process with ALL players (including existing ones)
-        // fetchPlayerData.js will handle filtering and moving existing players to 'existing' status
-        const processResult = await createProcess({
-            admin_id: String(message.author.id),
-            alliance_id: alliance.id,
-            player_ids: sanitizedPlayerIds, // Use ALL player IDs
-            action: 'addplayer',
-            // Store ID channel message for result embed
-            id_channel_message_id: message.id,
-            id_channel_channel_id: message.channel.id
-        });
+        if (alliances.length === 0) return;
 
-        // Remove processing reaction
-        await message.reactions.cache.get('⏳')?.users.remove(message.client.user.id);
-
-        // Add success reaction only (no status embed in ID channel)
-        await message.react(getComponentEmoji(getGlobalEmojiMap(), '1004'));
-
-        // CRITICAL: Manage queue to start execution (same as addPlayer.js)
-        // This call actually triggers the process to execute
-        await queueManager.manageQueue(processResult);
+        if (alliances.length === 1) {
+            // Single alliance - proceed directly
+            await processIdChannelPlayers(message, alliances[0], sanitizedPlayerIds, lang, emojiMap);
+        } else {
+            // Multiple alliances - show selection
+            const { embeds, components } = createMessageAllianceSelection(
+                alliances, message.author.id, message.id, lang, 0
+            );
+            await message.reply({ embeds, components });
+        }
 
     } catch (error) {
         await handleError(null, lang, error, 'handleIdChannelMessage', false);
-        // Try to add error reaction
         try {
             await message.reactions.cache.get('⏳')?.users.remove(message.client.user.id);
             await message.react(getComponentEmoji(getGlobalEmojiMap(), '1051'));
         } catch (reactionError) {
             await handleError(null, lang, reactionError, 'handleIdChannelMessage', false);
         }
+    }
+}
+
+/**
+ * Processes player IDs for a specific alliance in an ID channel
+ * Shared logic for both single-alliance (direct) and multi-alliance (after selection) flows
+ * @param {import('discord.js').Message} message - Original user message with player IDs
+ * @param {Object} alliance - Alliance object from database
+ * @param {string} sanitizedPlayerIds - Comma-separated sanitized player IDs
+ * @param {Object} lang - Language object
+ * @param {Object} emojiMap - Emoji map for reactions
+ * @param {string|null} replyMessageId - Bot's reply message ID to edit with results (multi-alliance flow)
+ */
+async function processIdChannelPlayers(message, alliance, sanitizedPlayerIds, lang, emojiMap, replyMessageId = null) {
+    // Check if ALL players already exist (for early exit embed only)
+    const playerIdsArray = sanitizedPlayerIds.split(',');
+    const existingPlayers = [];
+    const { playerQueries } = require('../utility/database');
+
+    for (const playerId of playerIdsArray) {
+        const existingPlayer = playerQueries.getPlayer(playerId);
+        if (existingPlayer) {
+            existingPlayers.push({
+                id: playerId,
+                nickname: existingPlayer.nickname,
+                alliance: allianceQueries.getAllianceById(existingPlayer.alliance_id)?.name || 'Unknown'
+            });
+        }
+    }
+
+    // If ALL players already exist, show embed and return (no process needed)
+    if (existingPlayers.length === playerIdsArray.length && existingPlayers.length > 0) {
+        await message.react(emojiMap['1017'] || 'ℹ️');
+
+        const embed = new EmbedBuilder()
+            .setTitle(lang.players.idChannel.content.title.allExist)
+            .setDescription(lang.players.idChannel.content.description.allExist)
+            .setColor(0xffa500)
+            .addFields([
+                {
+                    name: lang.players.idChannel.content.existingPlayersField.name,
+                    value: existingPlayers.map(p => lang.players.idChannel.content.existingPlayersField.value
+                        .replace('{nickname}', p.nickname)
+                        .replace('{id}', p.id)
+                        .replace('{alliance}', p.alliance)
+                    ).join('\n').slice(0, 1024),
+                }
+            ])
+            .setFooter({ text: message.author.tag, iconURL: message.author.displayAvatarURL() })
+            .setTimestamp();
+
+        if (replyMessageId) {
+            const replyMessage = await message.channel.messages.fetch(replyMessageId);
+            await replyMessage.edit({ embeds: [embed] });
+        } else {
+            await message.reply({ embeds: [embed] });
+        }
+        return;
+    }
+
+    // React to message to show processing
+    await message.react('⏳');
+
+    // Create process with ALL players (including existing ones)
+    const processResult = await createProcess({
+        admin_id: String(message.author.id),
+        alliance_id: alliance.id,
+        player_ids: sanitizedPlayerIds,
+        action: 'addplayer',
+        id_channel_message_id: message.id,
+        id_channel_channel_id: message.channel.id,
+        id_channel_reply_id: replyMessageId
+    });
+
+    // Remove processing reaction
+    await message.reactions.cache.get('⏳')?.users.remove(message.client.user.id);
+
+    // Add success reaction
+    await message.react(getComponentEmoji(getGlobalEmojiMap(), '1004'));
+
+    // Manage queue to start execution
+    await queueManager.manageQueue(processResult);
+}
+
+/**
+ * Creates the alliance selection embed and components for the message flow
+ * @param {Array} alliances - Array of alliance objects
+ * @param {string} userId - User ID who can interact
+ * @param {string} originalMsgId - Original message ID containing player IDs
+ * @param {Object} lang - Language object
+ * @param {number} page - Current page (0-indexed)
+ * @returns {Object} { embeds, components }
+ */
+function createMessageAllianceSelection(alliances, userId, originalMsgId, lang, page = 0) {
+    const itemsPerPage = 24;
+    const totalPages = Math.ceil(alliances.length / itemsPerPage);
+    const startIndex = page * itemsPerPage;
+    const currentPageAlliances = alliances.slice(startIndex, startIndex + itemsPerPage);
+
+    const options = currentPageAlliances.map(alliance => ({
+        label: alliance.name,
+        value: alliance.id.toString(),
+        emoji: getComponentEmoji(getEmojiMapForUser(userId), '1001')
+    }));
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId(`id_channel_msg_select_${originalMsgId}_${page}_${userId}`)
+        .setPlaceholder(lang.players.idChannel.selectMenu.selectAllianceMessage.placeholder)
+        .addOptions(options);
+
+    const selectRow = new ActionRowBuilder().addComponents(selectMenu);
+    const components = [selectRow];
+
+    if (totalPages > 1) {
+        const paginationRow = createUniversalPaginationButtons({
+            feature: 'id_channel_msg',
+            userId: userId,
+            currentPage: page,
+            totalPages,
+            lang,
+            contextData: [originalMsgId]
+        });
+        if (paginationRow) components.push(paginationRow);
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle(lang.players.idChannel.content.title.selectAllianceMessage)
+        .setDescription(lang.players.idChannel.content.description.selectAllianceMessage)
+        .setColor(0x3498db);
+
+    return { embeds: [embed], components };
+}
+
+/**
+ * Handles alliance selection from the message flow (multi-alliance channel)
+ * @param {import('discord.js').StringSelectMenuInteraction} interaction
+ */
+async function handleIdChannelMessageAllianceSelect(interaction) {
+    const { lang } = getUserInfo(interaction.user.id);
+    const emojiMap = getEmojiMapForUser(interaction.user.id);
+
+    try {
+        // customId: id_channel_msg_select_{originalMsgId}_{page}_{userId}
+        const parts = interaction.customId.split('_');
+        const originalMsgId = parts[4];
+        const expectedUserId = parts[6];
+
+        if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
+
+        const selectedAllianceId = parseInt(interaction.values[0]);
+        const alliance = allianceQueries.getAllianceById(selectedAllianceId);
+        if (!alliance) {
+            return await interaction.reply({
+                content: lang.players.idChannel.errors.notFound,
+                ephemeral: true
+            });
+        }
+
+        // Fetch the original user message
+        let originalMessage;
+        try {
+            originalMessage = await interaction.channel.messages.fetch(originalMsgId);
+        } catch {
+            return await interaction.reply({
+                content: lang.players.idChannel.errors.messageNotFound,
+                ephemeral: true
+            });
+        }
+
+        // Re-sanitize player IDs from original message
+        const sanitizedPlayerIds = sanitizePlayerIds(originalMessage.content);
+        if (!sanitizedPlayerIds) {
+            return await interaction.reply({
+                content: lang.players.idChannel.errors.invalidSelection,
+                ephemeral: true
+            });
+        }
+
+        // Update the bot's reply to confirm alliance selection - remove select menu
+        const playerCount = sanitizedPlayerIds.split(',').length;
+        const replyMessageId = interaction.message.id;
+        await interaction.update({
+            embeds: [
+                new EmbedBuilder()
+                    .setDescription(
+                        lang.players.idChannel.content.description.allianceSelected
+                            .replace('{alliance}', alliance.name)
+                            .replace('{count}', playerCount)
+                    )
+                    .setColor(0x3498db)
+            ],
+            components: []
+        });
+
+        // Process the players - pass replyMessageId so results edit this message
+        await processIdChannelPlayers(originalMessage, alliance, sanitizedPlayerIds, lang, emojiMap, replyMessageId);
+
+    } catch (error) {
+        await handleError(interaction, lang, error, 'handleIdChannelMessageAllianceSelect');
+    }
+}
+
+/**
+ * Handles pagination for the message flow alliance selection
+ * @param {import('discord.js').ButtonInteraction} interaction
+ */
+async function handleIdChannelMessagePagination(interaction) {
+    const { lang } = getUserInfo(interaction.user.id);
+
+    try {
+        const { userId: expectedUserId, newPage, contextData } = parsePaginationCustomId(interaction.customId, 1);
+
+        if (!(await assertUserMatches(interaction, expectedUserId, lang))) return;
+
+        const originalMsgId = contextData[0];
+
+        // Get alliances for this channel from cache
+        const channelEntries = global.idChannelCache.get(interaction.channel.id);
+        if (!channelEntries || channelEntries.length <= 1) {
+            return await interaction.reply({
+                content: lang.players.idChannel.errors.noAlliances,
+                ephemeral: true
+            });
+        }
+
+        const alliances = channelEntries
+            .map(entry => allianceQueries.getAllianceById(entry.alliance_id))
+            .filter(Boolean);
+
+        const { embeds, components } = createMessageAllianceSelection(
+            alliances, interaction.user.id, originalMsgId, lang, newPage
+        );
+
+        await interaction.update({ embeds, components });
+
+    } catch (error) {
+        await handleError(interaction, lang, error, 'handleIdChannelMessagePagination');
     }
 }
 
@@ -1260,8 +1492,11 @@ module.exports = {
     handleIdChannelAllianceSelection,
     handleIdChannelSelect,
     handleIdChannelMessage,
+    handleIdChannelMessageAllianceSelect,
+    handleIdChannelMessagePagination,
     initializeIdChannelCache,
     updateIdChannelCache,
+    removeFromIdChannelCache,
     handleAutoCleanButton,
     handleAutoCleanPagination,
     handleAutoCleanSelect,

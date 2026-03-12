@@ -435,62 +435,7 @@ class GiftCodeAPI {
                             });
 
                             // Notify owner admins about VALID codes only (if bot is ready)
-                            if (this.bot.isReady()) {
-                                const allAdmins = adminQueries.getAllAdmins();
-                                const ownerAdmins = allAdmins.filter(admin => admin.is_owner === 1);
-
-                                if (ownerAdmins.length > 0) {
-                                    const autoRedeemCount = allianceQueries.getAlliancesWithAutoRedeem().length;
-
-                                    // Send notification to each owner admin with ALL codes in one message
-                                    for (const admin of ownerAdmins) {
-                                        const { lang } = getUserInfo(admin.user_id);
-
-                                        // Create embeds for all valid codes
-                                        const embeds = validCodesForAutoRedeem.map(({ code, date }) => {
-                                            const adminEmbed = new EmbedBuilder()
-                                                .setTitle(lang.giftCode.apiGiftCode.content.title)
-                                                .setFields(
-                                                    {
-                                                        name: lang.giftCode.apiGiftCode.content.giftCodeDetailsField.name,
-                                                        value: lang.giftCode.apiGiftCode.content.giftCodeDetailsField.value
-                                                            .replace('{giftCode}', code)
-                                                            .replace('{date}', date)
-                                                            .replace('{source}', lang.giftCode.apiGiftCode.content.sourceAPI)
-                                                            .replace('{time}', `<t:${Math.floor(Date.now() / 1000)}:R>`)
-                                                    }
-                                                )
-                                                .setColor("#2ecc71"); // Green color
-
-                                            if (autoRedeemCount > 0) {
-                                                adminEmbed.addFields(
-                                                    {
-                                                        name: lang.giftCode.apiGiftCode.content.autoRedeem,
-                                                        value: lang.giftCode.apiGiftCode.content.autoRedeemValue
-                                                            .replace('{count}', autoRedeemCount),
-                                                    }
-                                                );
-                                            }
-
-                                            return adminEmbed;
-                                        });
-
-                                        // Send all embeds in one message (Discord allows up to 10 embeds per message)
-                                        // If more than 10 codes, split into multiple messages
-                                        try {
-                                            const user = await this.bot.users.fetch(admin.user_id);
-
-                                            // Split embeds into chunks of 10 (Discord's limit)
-                                            for (let i = 0; i < embeds.length; i += 10) {
-                                                const embedChunk = embeds.slice(i, i + 10);
-                                                await user.send({ embeds: embedChunk });
-                                            }
-                                        } catch (error) {
-                                            await handleError(null, null, error, 'sendAdminNotifications', false);
-                                        }
-                                    }
-                                }
-                            }
+                            await this.notifyOwnerAdmins(validCodesForAutoRedeem);
                         }
                     }
 
@@ -808,6 +753,74 @@ class GiftCodeAPI {
         } catch (error) {
             await handleError(null, null, error, 'createAutoRedeemProcessForCodeAndAlliance', false);
             return null;
+        }
+    }
+    /**
+     * Sends DM notifications to owner admins about newly discovered valid gift codes.
+     * Retries once after a delay if the bot is not ready on the first attempt.
+     * @param {Array<{code: string, date: string}>} validCodes - Valid codes to notify about
+     */
+    async notifyOwnerAdmins(validCodes) {
+        if (!validCodes || validCodes.length === 0) return;
+
+        const MAX_ATTEMPTS = 2;
+        const RETRY_DELAY_MS = 10000;
+
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            if (!this.bot.isReady()) {
+                console.warn(`[GiftCodeAPI] Bot not ready for DM notifications (attempt ${attempt}/${MAX_ATTEMPTS})`);
+                if (attempt < MAX_ATTEMPTS) {
+                    await this.sleep(RETRY_DELAY_MS);
+                    continue;
+                }
+                console.warn(`[GiftCodeAPI] Skipping DM notifications — bot not ready after ${MAX_ATTEMPTS} attempts. Codes: ${validCodes.map(c => c.code).join(', ')}`);
+                return;
+            }
+
+            const allAdmins = adminQueries.getAllAdmins();
+            const ownerAdmins = allAdmins.filter(admin => admin.is_owner === 1);
+            if (ownerAdmins.length === 0) return;
+
+            const autoRedeemCount = allianceQueries.getAlliancesWithAutoRedeem().length;
+
+            for (const admin of ownerAdmins) {
+                const { lang } = getUserInfo(admin.user_id);
+
+                const embeds = validCodes.map(({ code, date }) => {
+                    const adminEmbed = new EmbedBuilder()
+                        .setTitle(lang.giftCode.apiGiftCode.content.title)
+                        .setFields({
+                            name: lang.giftCode.apiGiftCode.content.giftCodeDetailsField.name,
+                            value: lang.giftCode.apiGiftCode.content.giftCodeDetailsField.value
+                                .replace('{giftCode}', code)
+                                .replace('{date}', date)
+                                .replace('{source}', lang.giftCode.apiGiftCode.content.sourceAPI)
+                                .replace('{time}', `<t:${Math.floor(Date.now() / 1000)}:R>`)
+                        })
+                        .setColor('#2ecc71');
+
+                    if (autoRedeemCount > 0) {
+                        adminEmbed.addFields({
+                            name: lang.giftCode.apiGiftCode.content.autoRedeem,
+                            value: lang.giftCode.apiGiftCode.content.autoRedeemValue
+                                .replace('{count}', autoRedeemCount)
+                        });
+                    }
+
+                    return adminEmbed;
+                });
+
+                try {
+                    const user = await this.bot.users.fetch(admin.user_id);
+                    for (let i = 0; i < embeds.length; i += 10) {
+                        await user.send({ embeds: embeds.slice(i, i + 10) });
+                    }
+                } catch (error) {
+                    await handleError(null, null, error, `sendAdminNotification_${admin.user_id}`, false);
+                }
+            }
+
+            return; // Success — don't retry
         }
     }
 }

@@ -37,6 +37,19 @@ function getMissingBotPermissions(interaction) {
 module.exports = {
     name: Events.InteractionCreate,
     async execute(interaction) {
+        // Handle autocomplete interactions
+        if (interaction.isAutocomplete()) {
+            const command = interaction.client.commands?.get(interaction.commandName);
+            if (command?.autocomplete) {
+                try {
+                    await command.autocomplete(interaction);
+                } catch (error) {
+                    console.error(`Autocomplete error for ${interaction.commandName}:`, error);
+                }
+            }
+            return;
+        }
+
         // Only handle slash commands here
         if (!interaction.isChatInputCommand()) return;
 

@@ -656,8 +656,18 @@ class PlayerDataProcessor {
                 ]);
             }
 
-            // Reply to the original message
-            await originalMessage.reply({ embeds: [embed] });
+            // Edit the existing reply or reply to the original message
+            if (processData.details.id_channel_reply_id) {
+                try {
+                    const replyMessage = await channel.messages.fetch(processData.details.id_channel_reply_id);
+                    await replyMessage.edit({ embeds: [embed] });
+                } catch {
+                    // Fallback to replying if the reply message can't be found
+                    await originalMessage.reply({ embeds: [embed] });
+                }
+            } else {
+                await originalMessage.reply({ embeds: [embed] });
+            }
 
         } catch (error) {
             await handleError(null, lang, error, 'handleAddPlayerButton', false);
@@ -713,10 +723,7 @@ class PlayerDataProcessor {
      * @returns {EmbedBuilder} Progress embed
      */
     createProgressEmbed(processData, alliance, lang, stats, processResult = {}, queueResult = {}) {
-        const progressPercentage = stats.totalPlayers > 0 ?
-            Math.round((stats.processed / stats.totalPlayers) * 100) : 0;
-
-        const progressBar = this.createProgressBar(progressPercentage);
+        const progressBar = this.createProgressBar(stats.processed, stats.totalPlayers);
 
         const playerCount = stats.totalPlayers;
 
@@ -732,8 +739,7 @@ class PlayerDataProcessor {
             .addFields([
                 {
                     name: lang.players.addPlayer.content.progressField.name,
-                    value: `${progressBar} ${progressPercentage}%`,
-
+                    value: progressBar,
                 },
                 {
                     name: lang.players.addPlayer.content.statisticsField.name,
@@ -750,15 +756,29 @@ class PlayerDataProcessor {
 
     /**
      * Creates a visual progress bar
-     * @param {number} percentage - Progress percentage (0-100)
+     * @param {number} processed - Number of processed items
+     * @param {number} total - Total number of items
+     * @param {number} [length=20] - Bar length
      * @returns {string} Progress bar string
      */
-    createProgressBar(percentage) {
-        const barLength = 20;
-        const filledLength = Math.round((percentage / 100) * barLength);
-        const emptyLength = barLength - filledLength;
+    createProgressBar(processed, total, length = 20) {
+        const styles = [
+            { filled: '█', empty: '░' },
+            { filled: '▰', empty: '▱' },
+            { filled: '▶', empty: '▷' },
+            { filled: '★', empty: '☆' }
+        ];
+        const style = styles[Math.floor(Math.random() * styles.length)];
 
-        return '█'.repeat(filledLength) + '░'.repeat(emptyLength);
+        if (total <= 0) {
+            return style.empty.repeat(length) + ' 0%';
+        }
+
+        const ratio = Math.max(0, Math.min(1, processed / total));
+        const filled = Math.round(ratio * length);
+        const empty = Math.max(length - filled, 0);
+        const percent = Math.min(100, Math.round(ratio * 100));
+        return style.filled.repeat(filled) + style.empty.repeat(empty) + ` ${percent}%`;
     }
 
     /**

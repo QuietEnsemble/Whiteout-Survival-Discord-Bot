@@ -68,6 +68,37 @@ function compareAllLanguages(mainLang = 'en') {
     }
 }
 
+/**
+ * Creates a proxy that falls back to the English value when a key is missing.
+ * Works recursively for nested objects so `lang.a.b.c` resolves correctly.
+ */
+function createFallbackProxy(target, fallback) {
+    return new Proxy(target, {
+        get(obj, prop) {
+            // Preserve internal/prototype access
+            if (typeof prop === 'symbol' || prop === 'toJSON' || prop === 'constructor') {
+                return obj[prop];
+            }
+
+            const value = obj[prop];
+            const fbValue = fallback?.[prop];
+
+            // Key missing in target — use fallback
+            if (value === undefined) {
+                return fbValue;
+            }
+
+            // Both are plain objects — proxy the nested level too
+            if (value && typeof value === 'object' && !Array.isArray(value) &&
+                fbValue && typeof fbValue === 'object' && !Array.isArray(fbValue)) {
+                return createFallbackProxy(value, fbValue);
+            }
+
+            return value;
+        }
+    });
+}
+
 // Load languages on module initialization
 loadLanguages();
 
@@ -76,6 +107,15 @@ try {
     compareAllLanguages('en');
 } catch (err) {
     console.error('[i18n] Error while comparing languages:', err);
+}
+
+// Wrap non-English languages with a fallback proxy to English
+const en = languages.en;
+if (en) {
+    for (const code of Object.keys(languages)) {
+        if (code === 'en') continue;
+        languages[code] = createFallbackProxy(languages[code], en);
+    }
 }
 
 // Export the languages object that can be imported directly
@@ -92,6 +132,14 @@ module.exports.reload = function() {
         compareAllLanguages('en');
     } catch (err) {
         console.error('[i18n] Error while comparing languages after reload:', err);
+    }
+    // Re-apply fallback proxies
+    const enData = languages.en;
+    if (enData) {
+        for (const code of Object.keys(languages)) {
+            if (code === 'en') continue;
+            languages[code] = createFallbackProxy(languages[code], enData);
+        }
     }
     console.log('i18n files reloaded');
 };

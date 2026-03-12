@@ -48,6 +48,11 @@ async function handleFeatureAccessButton(interaction) {
                 .setStyle(ButtonStyle.Secondary)
                 .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1041')),
             new ButtonBuilder()
+                .setCustomId(`feature_access_feat_inspect_${interaction.user.id}`)
+                .setLabel(lang.settings.featureAccess.buttons.inspect)
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1026')),
+            new ButtonBuilder()
                 .setCustomId(`feature_access_whitelist_${interaction.user.id}`)
                 .setLabel(lang.settings.featureAccess.buttons.whitelistChannels)
                 .setStyle(ButtonStyle.Secondary)

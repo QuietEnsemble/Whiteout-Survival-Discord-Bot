@@ -1236,7 +1236,7 @@ async function showFinalConfirmation(interaction, notificationId, channel, lang)
     }
 
 
-    const channelDisplay = channel ? channel.name : lang.notification.notificationSettings.content.channelField.directMessage;
+    const channelDisplay = channel ? `<#${channel.id}>` : lang.notification.notificationSettings.content.channelField.directMessage;
 
     const infoEmbed = new EmbedBuilder()
         .setTitle(lang.notification.notificationSettings.content.title.notificationInformation)

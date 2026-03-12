@@ -1,5 +1,3 @@
-'use strict';
-
 const {
     ButtonBuilder, ButtonStyle, ActionRowBuilder,
     ContainerBuilder, TextDisplayBuilder, SeparatorBuilder,
@@ -283,7 +281,7 @@ function calculateUpgrade(buildingData, fromKey, toKey, buffs) {
     const fromIdx   = levelKeys.indexOf(String(fromKey));
     const toIdx     = levelKeys.indexOf(String(toKey));
 
-    if (fromIdx === -1 || toIdx === -1 || fromIdx >= toIdx) return null;
+    if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) return null;
 
     // Resource reduction comes from Zinman level
     const resourceReduction  = ZINMAN_REDUCE[clamp5(buffs?.zinmanLevel)] / 100;
@@ -301,8 +299,8 @@ function calculateUpgrade(buildingData, fromKey, toKey, buffs) {
     let totalSeconds = 0;
     let numLevels    = 0;
 
-    // Sum the cost for each level transition (from fromIdx+1 up to and including toIdx)
-    for (let i = fromIdx + 1; i <= toIdx; i++) {
+    // Sum the cost for each level (from fromIdx up to and including toIdx)
+    for (let i = fromIdx; i <= toIdx; i++) {
         const levelData = buildingData[levelKeys[i]];
         if (!levelData) continue;
 
@@ -432,12 +430,13 @@ function buildCopySummary(entries, buffs, lang) {
     const lines = [lc.results.upgradePlan];
 
     // Per-entry upgrade summary
+    lines.push(lc.results.buildingsList);
     for (const e of entries) {
         const bldName   = buildingNames[e.bldId] || e.bldId;
         const dataObj   = getDataObj(e.type);
         const fromDisp  = dataObj[e.bldId] ? getLevelDisplay(e.fromKey, e.type, lang) : e.fromKey;
         const toDisp    = dataObj[e.bldId] ? getLevelDisplay(e.toKey,   e.type, lang) : e.toKey;
-        lines.push(`  - ${bldName} : ${fromDisp} → ${toDisp}`);
+        lines.push(`  - ${bldName}: ${fromDisp} → ${toDisp}`);
     }
 
     // Resources
@@ -643,7 +642,7 @@ function buildControlsContainer(type, bldId, fromKey, toKey, pageFrom, pageTo, u
  * @param {string} userId
  * @param {object} lang
  */
-function buildResultsContainer(entries, buffs, userId, lang) {
+function buildResultsContainer(entries, buffs, userId, lang, activeState) {
     const lc             = lang.calculators.buildings;
     const buildingNames  = getBuildingNames(lang);
     const resourceLabels = getResourceLabels(lang);
@@ -653,6 +652,7 @@ function buildResultsContainer(entries, buffs, userId, lang) {
     const lines = [lc.results.upgradePlan];
 
     // Per-entry upgrade summary
+    lines.push(lc.results.buildingsList);
     for (const e of entries) {
         const bldName  = buildingNames[e.bldId] || e.bldId;
         const dataObj  = getDataObj(e.type);
@@ -697,10 +697,17 @@ function buildResultsContainer(entries, buffs, userId, lang) {
         .setDisabled(!copyId)
         .setEmoji(getComponentEmoji(emojiMap, '1021'));
 
+    // Remove button — opens a modal to select entries to remove
+    const { type: ct, bldId: cb, fromKey: cf, toKey: ck } = activeState || {};
+    const removeBtn = new ButtonBuilder()
+        .setCustomId(`calc_bld_remove_${ct || 'x'}_${cb || 'x'}_${cf || 'x'}_${ck || 'x'}_${userId}`)
+        .setLabel(lc.buttons.remove)
+        .setStyle(ButtonStyle.Danger);
+
     return new ContainerBuilder()
         .setAccentColor(0x2ecc71)
         .addTextDisplayComponents(new TextDisplayBuilder().setContent(lines.join('\n')))
-        .addActionRowComponents(new ActionRowBuilder().addComponents(copyBtn));
+        .addActionRowComponents(new ActionRowBuilder().addComponents(copyBtn, removeBtn));
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -850,7 +857,7 @@ async function handleBuildingToLevelSelect(interaction) {
         await interaction.update({
             components: [
                 buildControlsContainer(type, bldId, fromKey, toKey, 0, 0, userId, lang),
-                buildResultsContainer(allEntries, buffs, userId, lang)
+                buildResultsContainer(allEntries, buffs, userId, lang, { type, bldId, fromKey, toKey })
             ],
             flags: MessageFlags.IsComponentsV2
         });
@@ -1068,7 +1075,7 @@ async function handleBuildingBuffsModal(interaction) {
         const controlsContainer = buildControlsContainer(type, bldId, fromKey, toKey, 0, 0, userId, lang);
         const entries           = getExistingEntries(interaction.message, buffs);
         const components        = entries.length > 0
-            ? [controlsContainer, buildResultsContainer(entries, buffs, userId, lang)]
+            ? [controlsContainer, buildResultsContainer(entries, buffs, userId, lang, { type, bldId, fromKey, toKey })]
             : [controlsContainer];
 
         await interaction.update({ components, flags: MessageFlags.IsComponentsV2 });
@@ -1110,6 +1117,90 @@ async function handleBuildingCopyButton(interaction) {
     }
 }
 
+/**
+ * Shows a modal with a multi-select to remove entries from the plan.
+ * CustomId: calc_bld_remove_{type}_{bldId}_{fromKey}_{toKey}_{userId}
+ */
+async function handleRemoveButton(interaction) {
+    try {
+        const ctx = await initHandler(interaction);
+        if (!ctx) return;
+        const { parts, userId, lang } = ctx;
+        // parts: ['calc', 'bld', 'remove', type, bldId, fromKey, toKey, userId]
+        const type    = parts[3];
+        const bldId   = parts[4];
+        const fromKey = parts[5];
+        const toKey   = parts[6];
+
+        const buffs   = getUserBuffs(userId);
+        const entries = getExistingEntries(interaction.message, buffs);
+
+        if (entries.length === 0) {
+            return await interaction.reply({ content: lang.calculators.buildings.errors.noSummary, ephemeral: true });
+        }
+
+        const lc = lang.calculators.buildings;
+        const rm = lc.removeModal;
+        const buildingNames = getBuildingNames(lang);
+
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('remove_entries')
+            .setPlaceholder(rm.placeholder)
+            .setMinValues(1)
+            .setMaxValues(entries.length)
+            .addOptions(entries.map((e, i) => {
+                const name = buildingNames[e.bldId] || e.bldId;
+                return new StringSelectMenuOptionBuilder()
+                    .setLabel(name)
+                    .setValue(String(i));
+            }));
+
+        const label = new LabelBuilder()
+            .setLabel(rm.label)
+            .setStringSelectMenuComponent(selectMenu);
+
+        const modal = new ModalBuilder()
+            .setCustomId(`calc_bld_rmmodal_${type}_${bldId}_${fromKey}_${toKey}_${userId}`)
+            .setTitle(rm.title)
+            .addLabelComponents(label);
+
+        await interaction.showModal(modal);
+    } catch (err) {
+        await handleError(interaction, null, err, 'handleRemoveButton');
+    }
+}
+
+/**
+ * Processes removal of selected entries from the plan.
+ * CustomId: calc_bld_rmmodal_{type}_{bldId}_{fromKey}_{toKey}_{userId}
+ */
+async function handleRemoveModal(interaction) {
+    try {
+        const ctx = await initHandler(interaction);
+        if (!ctx) return;
+        const { parts, userId, lang } = ctx;
+        // parts: ['calc', 'bld', 'rmmodal', type, bldId, fromKey, toKey, userId]
+        const type    = parts[3];
+        const bldId   = parts[4];
+        const fromKey = parts[5];
+        const toKey   = parts[6];
+
+        const buffs     = getUserBuffs(userId);
+        const entries   = getExistingEntries(interaction.message, buffs);
+        const toRemove  = new Set(interaction.fields.getStringSelectValues('remove_entries'));
+        const remaining = entries.filter((_, i) => !toRemove.has(String(i)));
+
+        const controlsContainer = buildControlsContainer(type, bldId, fromKey, toKey, 0, 0, userId, lang);
+        const components = remaining.length > 0
+            ? [controlsContainer, buildResultsContainer(remaining, buffs, userId, lang, { type, bldId, fromKey, toKey })]
+            : [controlsContainer];
+
+        await interaction.update({ components, flags: MessageFlags.IsComponentsV2 });
+    } catch (err) {
+        await handleError(interaction, null, err, 'handleRemoveModal');
+    }
+}
+
 module.exports = {
     handleBuildingsButton,
     handleBuildingTypeSelection,
@@ -1120,5 +1211,7 @@ module.exports = {
     handleBuildingToLevelPage,
     handleBuildingBuffsButton,
     handleBuildingBuffsModal,
-    handleBuildingCopyButton
+    handleBuildingCopyButton,
+    handleRemoveButton,
+    handleRemoveModal
 };

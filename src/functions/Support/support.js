@@ -40,6 +40,21 @@ async function handleSupportButton(interaction) {
             });
         }
 
+        const buttons = [];
+
+        // Owner-only: Generate Report button
+        if (adminData.is_owner) {
+            buttons.push(
+                new ButtonBuilder()
+                    .setCustomId(`support_report_${interaction.user.id}`)
+                    .setLabel(lang.support.mainPage.buttons.generateReport)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji(getComponentEmoji(getEmojiMapForUser(interaction.user.id), '1021'))
+            );
+        } 
+
+        buttons.push(createBackToPanelButton(interaction.user.id, lang));
+
         const newSection = [
             new ContainerBuilder()
                 .setAccentColor(0xe67e22)
@@ -51,9 +66,7 @@ async function handleSupportButton(interaction) {
                 ).addSeparatorComponents(
                     new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
                 ).addActionRowComponents(
-                    new ActionRowBuilder().addComponents(
-                        createBackToPanelButton(interaction.user.id, lang)
-                    )
+                    new ActionRowBuilder().addComponents(...buttons)
                 )
         ];
 

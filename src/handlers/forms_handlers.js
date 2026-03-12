@@ -20,6 +20,7 @@ const emojisUpload = require('../functions/Settings/theme/emojisImport');
 const dbMigration = require('../functions/Settings/migration');
 const backUpCreate = require('../functions/Settings/backup/backupCreate');
 const buildings = require('../functions/Calculators/Buildings/buildings');
+const warAcademy = require('../functions/Calculators/WarAcademy/warAcademy');
 
 // === HANDLER REGISTRY ===
 const formHandlers = [
@@ -64,7 +65,10 @@ const formHandlers = [
     { pattern: /^db_backup_oauth_code_modal_/, fn: backUpCreate.handleOAuthCodeModal },
 
     // Calculators
-    { pattern: /^calc_buffs_modal_/, fn: buildings.handleBuildingBuffsModal }
+    { pattern: /^calc_buffs_modal_/, fn: buildings.handleBuildingBuffsModal },
+    { pattern: /^calc_bld_rmmodal_/, fn: buildings.handleRemoveModal },
+    { pattern: /^calc_wa_modal_/, fn: warAcademy.handleBuffsModal },
+    { pattern: /^calc_wa_rmmodal_/, fn: warAcademy.handleRemoveModal }
 ];
 
 // === SETUP FUNCTION ===

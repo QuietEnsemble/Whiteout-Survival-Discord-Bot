@@ -3,7 +3,7 @@ const { adminQueries, allianceQueries, playerQueries, idChannelQueries, adminLog
 const { LOG_CODES } = require('../utility/AdminLogs');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
 const { stopAutoRefresh } = require('./refreshAlliance');
-const { updateIdChannelCache } = require('../Players/idChannel');
+const { updateIdChannelCache, removeFromIdChannelCache } = require('../Players/idChannel');
 const { createUniversalPaginationButtons, parsePaginationCustomId } = require('../Pagination/universalPagination');
 const { getUserInfo, assertUserMatches, handleError, hasPermission, updateComponentsV2AfterSeparator } = require('../utility/commonFunctions');
 const { getEmojiMapForUser, getComponentEmoji } = require('./../utility/emojis');
@@ -527,8 +527,8 @@ async function performAllianceDeletion(interaction, allianceId, requesterId = nu
             const idChannels = idChannelQueries.getChannelsByAlliance(allianceId);
             for (const channel of idChannels) {
                 idChannelQueries.deleteChannel(channel.id);
-                // Update cache to remove the channel
-                updateIdChannelCache(channel.channel_id, null);
+                // Update cache to remove only this alliance's entry
+                removeFromIdChannelCache(channel.channel_id, channel.id);
             }
 
             // Stop auto-refresh for this alliance before deletion

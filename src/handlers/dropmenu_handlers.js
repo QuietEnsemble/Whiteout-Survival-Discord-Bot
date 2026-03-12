@@ -25,6 +25,7 @@ const notificationMentions = require('../functions/Notification/notificationMent
 const notificationFields = require('../functions/Notification/notificationFields');
 const notificationSettings = require('../functions/Notification/notificationSettings');
 const shareNotification = require('../functions/Notification/shareNotification');
+const scheduleView = require('../functions/Notification/scheduleView');
 const emojisActivate = require('../functions/Settings/theme/emojisActivate');
 const emojisEdit = require('../functions/Settings/theme/emojisEdit');
 const emojisView = require('../functions/Settings/theme/emojisView');
@@ -32,6 +33,7 @@ const emojisExport = require('../functions/Settings/theme/emojisExport');
 const emojisDelete = require('../functions/Settings/theme/emojisDelete');
 const featureAccess = require('../functions/Settings/featureAccess');
 const buildings = require('../functions/Calculators/Buildings/buildings');
+const warAcademy = require('../functions/Calculators/WarAcademy/warAcademy');
 
 // === HANDLER REGISTRY ===
 const dropdownHandlers = [
@@ -58,6 +60,7 @@ const dropdownHandlers = [
     { type: 'string', pattern: /^emoji_export_select_/, fn: emojisExport.handleEmojiExportSelection },
     { type: 'string', pattern: /^emoji_delete_select_/, fn: emojisDelete.handleEmojiDeleteSelection },
     { type: 'string', pattern: /^alliance_select_add_player_/, fn: addPlayer.handleAllianceSelection },
+    { type: 'string', pattern: /^id_channel_msg_select_/, fn: idChannel.handleIdChannelMessageAllianceSelect },
     { type: 'string', pattern: /^id_channel_alliance_select_/, fn: idChannel.handleIdChannelAllianceSelection },
     { type: 'string', pattern: /^id_channel_remove_select_/, fn: idChannel.handleIdChannelRemoveSelect },
     { type: 'string', pattern: /^id_channel_autoclean_select_/, fn: idChannel.handleAutoCleanSelect },
@@ -127,12 +130,19 @@ const dropdownHandlers = [
     { type: 'string', pattern: /^calc_bld_from_/, fn: buildings.handleBuildingFromLevelSelect },
     { type: 'string', pattern: /^calc_bld_to_/, fn: buildings.handleBuildingToLevelSelect },
 
+    // War Academy calculator
+    { type: 'string', pattern: /^calc_wa_select_/, fn: warAcademy.handleSkillSelect },
+    { type: 'string', pattern: /^calc_wa_from_/, fn: warAcademy.handleFromLevelSelect },
+    { type: 'string', pattern: /^calc_wa_to_/, fn: warAcademy.handleToLevelSelect },
+
     // === Channel Select Menus ===
     { type: 'channel', pattern: /^alliance_channel_select_/, fn: createAlliance.handleAllianceChannelSelection },
     { type: 'channel', pattern: /^alliance_channel_edit_/, fn: editAlliance.handleEditAllianceChannelSelection },
     { type: 'channel', pattern: /^id_channel_select_/, fn: idChannel.handleIdChannelSelect },
     { type: 'channel', pattern: /^gift_code_channel_select_/, fn: giftCodeChannel.handleGiftCodeChannelSelect },
     { type: 'channel', pattern: /^notification_channel_select_/, fn: notificationSettings.handleChannelSelection },
+    { type: 'channel', pattern: /^schedule_board_filter_/, fn: scheduleView.handleBoardFilterChannel },
+    { type: 'channel', pattern: /^schedule_board_target_/, fn: scheduleView.handleBoardTargetChannel },
     { type: 'channel', pattern: /^feature_access_whitelist_select_/, fn: featureAccess.handleWhitelistSelect },
 ];
 

@@ -573,11 +573,14 @@
 					"remove": "### Remove Channel",
 					"removeSuccess": "### Channel Removed",
 					"allExist": "All Players Already Exist",
-					"success": "### Channel Linked"
+					"success": "### Channel Linked",
+					"selectAllianceMessage": "Select Alliance"
 				},
 				"description": {
 					"base": "Choose an action for ID channels:",
 					"selectAlliance": "Choose which alliance to link the ID channel to.",
+					"selectAllianceMessage": "Select which alliance to add to.",
+					"allianceSelected": "Adding {count} player(s) to **{alliance}**...",
 					"channelID": "Choose a channel where users can submit player IDs for alliance: **{alliance}**",
 					"remove": "Choose an ID channel to remove the link from",
 					"removeSuccess": "The ID channel link has been removed successfully.",
@@ -601,6 +604,9 @@
 				"selectAlliance": {
 					"placeholder": "Select an alliance to manage its ID channel",
 					"description": "Priority {alliancePriority} | Players: {playerCount}"
+				},
+				"selectAllianceMessage": {
+					"placeholder": "Select an alliance"
 				},
 				"selectChannel": {
 					"placeholder": "Select a channel for this alliance",
@@ -650,8 +656,9 @@
 				"notFound": "{emoji.1050} Alliance not found. Please try again.",
 				"invalidSelection": "{emoji.1050} Invalid channel selection. Please try again.",
 				"noChannelsToRemove": "{emoji.1050} No ID channels found to remove.",
-				"channelAlreadyLinked": "{emoji.1050} The channel {channel} is already linked to **{alliance}**. A channel can only be linked to one alliance at a time.",
-				"channelIsGiftCodeChannel": "{emoji.1050} The channel {channel} is already being used as a Gift Code Channel. A channel cannot be both an ID channel and a Gift Code channel."
+				"channelAlreadyLinked": "{emoji.1050} The channel {channel} is already linked to **{alliance}**.",
+				"channelIsGiftCodeChannel": "{emoji.1050} The channel {channel} is already being used as a Gift Code Channel. A channel cannot be both an ID channel and a Gift Code channel.",
+				"messageNotFound": "{emoji.1050} Could not find the original message. Please try again."
 			}
 		},
 		"movePlayer": {
@@ -1130,11 +1137,17 @@
 				"templateLibraryField": {
 					"name": "- **Template Library**",
 					"value": "  - Create, share, and customize notification templates"
+				},
+				"scheduleViewField": {
+					"name": "- **Schedule View**",
+					"value": "  - View upcoming scheduled notifications"
 				}
 			},
 			"buttons": {
-				"createNotification": "Create Notification",
-				"deleteNotification": "Delete Notification"
+				"createNotification": "Create",
+				"deleteNotification": "Delete",
+				"editNotification": "Edit",
+				"scheduleView": "Schedule"
 			}
 		},
 		"createNotification": {
@@ -1210,7 +1223,6 @@
 				"disabled": "Disabled"
 			},
 			"buttons": {
-				"deleteNotification": "Delete Notification",
 				"serverNotifications": "Server Notifications",
 				"privateNotifications": "Private Notifications",
 				"confirm": "Confirm Deletion",
@@ -1278,7 +1290,6 @@
 				"saved": "Notification changes saved successfully!"
 			},
 			"buttons": {
-				"editNotification": "Edit Notification",
 				"serverNotifications": "Server Notifications",
 				"privateNotifications": "Private Notifications",
 				"info": "Info",
@@ -1704,6 +1715,45 @@
 				"invalidDateFormat": "{emoji.1050} Invalid date format. Use DD/MM/YYYY (e.g., 25/12/2024)",
 				"invalidTimeFormat": "{emoji.1050} Invalid time format. Use HH:MM:SS (e.g., 14:30:00)",
 				"invalidDateTime": "{emoji.1050} Invalid date or time values. Please check your input."
+			}
+		},
+		"scheduleView": {
+			"content": {
+				"title": "### {emoji.1022} Notification Schedule",
+				"typeSelection": "### {emoji.1022} View Schedule",
+				"typeDescription": "Select which type of notifications to view.",
+				"noNotifications": "No upcoming notifications found.",
+				"today": "### Today",
+				"next7Days": "### Next 7 Days",
+				"next14Days": "### Next 14 Days",
+				"beyond14Days": "### Beyond 14 Days",
+				"boardScopeTitle": "### {emoji.1022} Schedule Board Scope",
+				"boardScopeDescription": "Select which notifications the board will display.",
+				"boardServerWideDescription": "- **Server Wide**\n  - Displays all notifications across all channels.",
+				"boardPerChannelDescription": "- **Per-Channel**\n  - Displays notifications for a specific channel only.",
+				"boardFilterChannelTitle": "### {emoji.1022} Select Source Channel",
+				"boardFilterChannelDescription": "Select which channel's notifications to display on the board.",
+				"boardTargetChannelTitle": "### {emoji.1022} Select Target Channel",
+				"boardTargetChannelDescription": "Select the channel where the schedule board will be sent.",
+				"boardSent": "Schedule board sent to <#{channelId}>.",
+				"boardTitle": "### {emoji.1022} Events Schedule"
+			},
+			"buttons": {
+				"serverNotifications": "Server",
+				"privateNotifications": "Private",
+				"edit": "Edit",
+				"send": "Send",
+				"serverWide": "Server Wide",
+				"perChannel": "Per-Channel",
+				"nextPage": "More Events"
+			},
+			"details": {
+				"triggerTime": "({time} UTC)",
+				"nextTrigger": "Start <t:{timestamp}:R>",
+				"repeatNone": "Repeat: None",
+				"repeatEvery": "Repeat: Every {parts}",
+				"repeatWeekly": "Repeat: Weekly - {days}",
+				"channel": "Channel: <#{channelId}>"
 			}
 		}
 	},
@@ -2484,11 +2534,13 @@
 				"noNotificationsDeactivated": "No notifications were deactivated.",
 				"updated": "Feature access updated!",
 				"privateNotifications": "private notifications",
-				"calculators": "calculators"
+				"calculators": "calculators",
+				"inspect": "inspect"
 			},
 			"buttons": {
 				"privateNotifications": "Private Notifications",
 				"calculators": "Calculators",
+				"inspect": "Inspect",
 				"whitelistChannels": "Whitelist Channels",
 				"everyone": "everyone",
 				"admins": "Admins Only",
@@ -2518,8 +2570,18 @@
 		"mainPage": {
 			"content": {
 				"title": "### {emoji.1039} Support",
-				"description": "If you need help with the bot or are experiencing any issues, feel free to ask on our [Discord](https://discord.gg/A7ZVTFd4p9).\nFor emotional and financial support, you can buy me a coffee here: [Buy Me A Coffee](https://buymeacoffee.com/wosland) {emoji.1039}"
+				"description": "If you need help with the bot or are experiencing any issues, feel free to ask on our [Discord](https://discord.gg/A7ZVTFd4p9) and if you are facing any errors, click on \"Generate Report\" button.\nFor emotional and financial support, you can buy me a coffee here: [Buy Me A Coffee](https://buymeacoffee.com/wosland) {emoji.1039}"
+			},
+			"buttons": {
+				"generateReport": "Generate Report"
 			}
+		},
+		"report": {
+			"noErrors": "No recent errors found in the system logs.",
+			"dmSent": "Error report sent to your DMs.",
+			"dmFailed": "Could not send the report. Make sure your DMs are open.",
+			"discordButton": "Get Support",
+			"dmMessage": "**Error Report** — Generated <t:{time}:R>\nPlease forward this message to the support server linked in the button below."
 		}
 	},
 	"calculators": {
@@ -2529,10 +2591,15 @@
 				"BuildingsField": {
 					"name": "- **Buildings Calculator**",
 					"value": "  - Calculate the cost and time required to upgrade your buildings."
+				},
+				"WarAcademyField": {
+					"name": "- **War Academy Calculator**",
+					"value": "  - Calculate the cost and time required to upgrade your War Academy skills."
 				}
 			},
 			"buttons": {
-				"buildings": "Buildings"
+				"buildings": "Buildings",
+				"warAcademy": "War Academy"
 			},
 			"errors": {}
 		},
@@ -2579,12 +2646,13 @@
 				"back": "Back",
 				"prev": "Prev",
 				"next": "Next",
-				"copy": "Copy"
+				"copy": "Copy",
+				"remove": "Remove"
 			},
 			"placeholders": {
 				"selectBuilding": "Select a building",
-				"selectStartingLevel": "Select starting level",
-				"selectTargetLevel": "Select target level"
+				"selectStartingLevel": "Select first level to upgrade",
+				"selectTargetLevel": "Select last level to upgrade"
 			},
 			"modal": {
 				"title": "Calculator Buffs",
@@ -2618,12 +2686,18 @@
 				},
 				"speed": {
 					"label": "Construction Speed %",
-					"description": "Manual construction speed buff (e.g. 150 for 150%)",
+					"description": "construction speed buff (e.g. 150 for 150%)",
 					"placeholder": "e.g. 150"
 				}
 			},
+			"removeModal": {
+				"title": "Remove from Plan",
+				"label": "Select entries to remove",
+				"placeholder": "Select entries"
+			},
 			"results": {
 				"upgradePlan": "### Upgrade Plan",
+				"buildingsList": "- **Buildings**",
 				"resourcesRequired": "- **Resources Required:**",
 				"buildTime": "- **Build Time:**",
 				"original": "  - Original: **{time}**",
@@ -2640,6 +2714,126 @@
 			},
 			"errors": {
 				"calcFailed": "Unable to calculate upgrade cost. Please check your level selections.",
+				"noSummary": "Unable to generate summary.",
+				"dmSent": "Summary sent to your DMs!"
+			}
+		},
+		"warAcademy": {
+			"content": {
+				"resources": {
+					"meat": "Meat",
+					"wood": "Wood",
+					"coal": "Coal",
+					"iron": "Iron",
+					"steel": "Steel",
+					"fcShards": "FC Shards"
+				},
+				"skills": {
+					"infantry": {
+						"flameSquad": "Flame Squad",
+						"flameShield": "Flame Shield",
+						"flameStrike": "Flame Strike",
+						"flameTomahawk": "Flame Tomahawk",
+						"flameProtection": "Flame Protection",
+						"flameLegion": "Flame Legion",
+						"helios": "Helios Infantry",
+						"heliosHealing": "Helios Infantry Healing",
+						"heliosTraining": "Helios Infantry Training",
+						"heliosFirstAid": "Helios Infantry First Aid"
+					},
+					"marksman": {
+						"flameSquad": "Flame Squad",
+						"crystalArmor": "Crystal Armor",
+						"crystalVision": "Crystal Vision",
+						"crystalArrow": "Crystal Arrow",
+						"crystalProtection": "Crystal Protection",
+						"flameLegion": "Flame Legion",
+						"helios": "Helios Marksman",
+						"heliosHealing": "Helios Marksman Healing",
+						"heliosTraining": "Helios Marksman Training",
+						"heliosFirstAid": "Helios Marksman First Aid"
+					},
+					"lancer": {
+						"flameSquad": "Flame Squad",
+						"blazingArmor": "Blazing Armor",
+						"blazingCharge": "Blazing Charge",
+						"blazingLance": "Blazing Lance",
+						"blazingGuardian": "Blazing Guardian",
+						"flameLegion": "Flame Legion",
+						"helios": "Helios Lancer",
+						"heliosHealing": "Helios Lancer Healing",
+						"heliosTraining": "Helios Lancer Training",
+						"heliosFirstAid": "Helios Lancer First Aid"
+					}
+				}
+			},
+			"categories": {
+				"infantry": "Infantry",
+				"marksman": "Marksman",
+				"lancer": "Lancer"
+			},
+			"levelDisplay": "Level {key}",
+			"header": {
+				"categorySelection": "### War Academy Calculator\nSelect the troop category:",
+				"controls": "### {category} Skills",
+				"from": "**From:** Level {level}",
+				"selected": "**Skill:** {name}"
+			},
+			"buttons": {
+				"infantry": "Infantry",
+				"marksman": "Marksman",
+				"lancer": "Lancer",
+				"buffs": "Buffs",
+				"back": "Back",
+				"prev": "Prev",
+				"next": "Next",
+				"copy": "Copy",
+				"remove": "Remove"
+			},
+			"placeholders": {
+				"selectSkill": "Select a skill",
+				"selectStartingLevel": "Select first level to research",
+				"selectTargetLevel": "Select last level to research"
+			},
+			"modal": {
+				"title": "Research Buffs",
+				"vp": {
+					"label": "VP Research Speed Bonus",
+					"placeholder": "Select VP Bonus",
+					"off": "Off",
+					"vp10": "VP 10%",
+					"vp15": "VP 15%"
+				},
+				"speed": {
+					"label": "Research Speed %",
+					"description": "Manual research speed buff (e.g. 150 for 150%)",
+					"placeholder": "e.g. 150"
+				}
+			},
+			"removeModal": {
+				"title": "Remove from Plan",
+				"label": "Select entries to remove",
+				"placeholder": "Select entries"
+			},
+			"results": {
+				"upgradePlan": "### Research Plan",
+				"skillsList": "- **Skills**",
+				"resourcesRequired": "- **Resources Required:**",
+				"researchTime": "- **Research Time:**",
+				"original": "  - Original: **{time}**",
+				"withBuffs": "  - With buffs: **{time}**",
+				"requirements": "- **Requirements:**",
+				"warAcademy": "War Academy",
+				"skillRequirements": " - **Skill Prerequisites:**",
+				"buffGained": "- **Buff Gained:**",
+				"buffsLine": "- **Speed Buffs Applied**\n  - {parts}",
+				"buffs": {
+					"researchSpeed": "Research Speed: {pct}%",
+					"vpBonus": "VP Bonus: +{pct}%"
+				}
+			},
+			"errors": {
+				"calcFailed": "Unable to calculate research cost. Please check your level selections.",
 				"noSummary": "Unable to generate summary.",
 				"dmSent": "Summary sent to your DMs!"
 			}

@@ -490,17 +490,7 @@ async function hasHigherPriorityQueued(currentPriority) {
 async function cleanupOldProcesses(maxAgeMs = 24 * 60 * 60 * 1000) { // Default 24 hours
     try {
         const cutoffDate = new Date(Date.now() - maxAgeMs).toISOString();
-        const result = processQueries.cleanupOldProcesses(cutoffDate);
-
-        systemLogQueries.addLog(
-            'maintenance',
-            `Cleaned up ${result.changes} old processes`,
-            JSON.stringify({
-                cutoffDate,
-                deletedCount: result.changes,
-                function: 'cleanupOldProcesses'
-            })
-        );
+        processQueries.cleanupOldProcesses(cutoffDate);
 
         return true;
     } catch (error) {

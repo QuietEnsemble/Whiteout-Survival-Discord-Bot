@@ -1739,7 +1739,7 @@ function buildRedeemProgressEmbed(stats, context) {
         descriptionParts.push(`Gift code: \`${context.giftCode}\``);
     }
 
-    descriptionParts.push(`Progress: \`${progressBar}\` (${stats.processed}/${stats.total || 0})`);
+    descriptionParts.push(`Progress: ${progressBar} (${stats.processed}/${stats.total || 0})`);
 
     if (context?.stateMessage) {
         descriptionParts.push(context.stateMessage);
@@ -1766,15 +1766,23 @@ function buildRedeemProgressEmbed(stats, context) {
 }
 
 function createProgressBar(processed, total, length = 20) {
+    const styles = [
+        { filled: '█', empty: '░' },
+        { filled: '▰', empty: '▱' },
+        { filled: '▶', empty: '▷' },
+        { filled: '★', empty: '☆' }
+    ];
+    const style = styles[Math.floor(Math.random() * styles.length)];
+
     if (total <= 0) {
-        return `[${'-'.repeat(length)}] 0%`;
+        return style.empty.repeat(length) + ' 0%';
     }
 
     const ratio = Math.max(0, Math.min(1, processed / total));
     const filled = Math.round(ratio * length);
-    const bar = `${'='.repeat(filled)}${'-'.repeat(Math.max(length - filled, 0))}`;
+    const empty = Math.max(length - filled, 0);
     const percent = Math.min(100, Math.round(ratio * 100));
-    return `[${bar}] ${percent}%`;
+    return style.filled.repeat(filled) + style.empty.repeat(empty) + ` ${percent}%`;
 }
 
 function skipRemainingRedeems(current, redeemContext, results, abortStatus) {

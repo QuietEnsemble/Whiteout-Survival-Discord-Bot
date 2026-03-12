@@ -573,11 +573,14 @@
                     "remove": "### Supprimer le canal",
                     "removeSuccess": "### Canal supprimé",
                     "allExist": "Tous les joueurs existent déjà",
-                    "success": "### Canal lié"
+                    "success": "### Canal lié",
+                    "selectAllianceMessage": "Sélectionner une alliance"
                 },
                 "description": {
                     "base": "Choisissez une action pour les canaux d'ID :",
                     "selectAlliance": "Choisissez l'alliance à laquelle lier le canal d'ID.",
+					"selectAllianceMessage": "Ce canal est lié à plusieurs alliances. Sélectionnez l'alliance à laquelle ajouter ces joueurs.",
+					"allianceSelected": "Ajout de {count} joueur(s) à **{alliance}**...",
                     "channelID": "Choisissez un canal où les utilisateurs peuvent soumettre des IDs de joueur pour l'alliance : **{alliance}**",
                     "remove": "Choisissez un canal d'ID à délier",
                     "removeSuccess": "Le lien du canal d'ID a été supprimé avec succès.",
@@ -601,6 +604,9 @@
                 "selectAlliance": {
                     "placeholder": "Sélectionnez une alliance pour gérer son canal d'ID",
                     "description": "Priorité {alliancePriority} | Joueurs : {playerCount}"
+                },
+                "selectAllianceMessage": {
+                    "placeholder": "Sélectionnez une alliance"
                 },
                 "selectChannel": {
                     "placeholder": "Sélectionnez un canal pour cette alliance",
@@ -650,8 +656,9 @@
                 "notFound": "{emoji.1050} Alliance introuvable. Veuillez réessayer.",
                 "invalidSelection": "{emoji.1050} Sélection de canal invalide. Veuillez réessayer.",
                 "noChannelsToRemove": "{emoji.1050} Aucun canal d'ID trouvé à supprimer.",
-                "channelAlreadyLinked": "{emoji.1050} Le canal {channel} est déjà lié à **{alliance}**. Un canal ne peut être lié qu'à une seule alliance à la fois.",
-                "channelIsGiftCodeChannel": "{emoji.1050} Le canal {channel} est déjà utilisé comme canal de codes cadeau. Un canal ne peut pas être à la fois un canal d'ID et un canal de codes cadeau."
+                "channelAlreadyLinked": "{emoji.1050} Le canal {channel} est déjà lié à **{alliance}**.",
+                "channelIsGiftCodeChannel": "{emoji.1050} Le canal {channel} est déjà utilisé comme canal de codes cadeau. Un canal ne peut pas être à la fois un canal d'ID et un canal de codes cadeau.",
+                "messageNotFound": "{emoji.1050} Le message original est introuvable. Veuillez réessayer."
             }
         },
         "movePlayer": {
@@ -1130,11 +1137,18 @@
                 "templateLibraryField": {
                     "name": "- **Bibliothèque de modèles**",
                     "value": "  - Créer, partager et personnaliser des modèles de notification"
+                },
+                "scheduleViewField": {
+                    "name": "- **Calendrier**",
+                    "value": "  - Voir les notifications planifiées à venir"
                 }
             },
             "buttons": {
                 "createNotification": "Créer",
-                "deleteNotification": "Supprimer"
+                "deleteNotification": "Supprimer",
+                "editNotification": "Modifier",
+                "scheduleView": "Calendrier"
+                
             }
         },
         "createNotification": {
@@ -1210,7 +1224,6 @@
                 "disabled": "Désactivée"
             },
             "buttons": {
-                "deleteNotification": "Supprimer",
                 "serverNotifications": "Serveur",
                 "privateNotifications": "Privées",
                 "confirm": "Confirmer",
@@ -1278,7 +1291,6 @@
                 "saved": "Modifications de la notification enregistrées avec succès !"
             },
             "buttons": {
-                "editNotification": "Modifier",
                 "serverNotifications": "Serveur",
                 "privateNotifications": "Privées",
                 "info": "Info",
@@ -1704,6 +1716,45 @@
                 "invalidDateFormat": "{emoji.1050} Format de date invalide. Utilisez JJ/MM/AAAA (ex., 25/12/2024)",
                 "invalidTimeFormat": "{emoji.1050} Format d'heure invalide. Utilisez HH:MM:SS (ex., 14:30:00)",
                 "invalidDateTime": "{emoji.1050} Date ou heure invalide. Vérifiez votre saisie."
+            }
+        },
+        "scheduleView": {
+            "content": {
+                "title": "### {emoji.1022} Calendrier des notifications",
+                "typeSelection": "### {emoji.1022} Voir le calendrier",
+                "typeDescription": "Sélectionnez le type de notifications à afficher.",
+                "noNotifications": "Aucune notification à venir trouvée.",
+                "today": "### Aujourd'hui",
+                "next7Days": "### 7 prochains jours",
+                "next14Days": "### 14 prochains jours",
+                "beyond14Days": "### Au-delà de 14 jours",
+                "boardScopeTitle": "### {emoji.1022} Portée du tableau",
+                "boardScopeDescription": "Sélectionnez les notifications à afficher sur le tableau.",
+                "boardServerWideDescription": "- **Tout le serveur** — Affiche toutes les notifications de tous les canaux.",
+                "boardPerChannelDescription": "- **Par canal** — Affiche les notifications d'un canal spécifique uniquement.",
+                "boardFilterChannelTitle": "### {emoji.1022} Sélectionner le canal source",
+                "boardFilterChannelDescription": "Sélectionnez le canal dont les notifications seront affichées.",
+                "boardTargetChannelTitle": "### {emoji.1022} Sélectionner le canal cible",
+                "boardTargetChannelDescription": "Sélectionnez le canal où le tableau sera envoyé.",
+                "boardSent": "Tableau envoyé dans <#{channelId}>.",
+				"boardTitle": "### {emoji.1022} Calendrier des événements"
+            },
+            "buttons": {
+                "serverNotifications": "Serveur",
+                "privateNotifications": "Privé",
+                "edit": "Modifier",
+                "send": "Envoyer",
+                "serverWide": "Tout le serveur",
+                "perChannel": "Par canal",
+				"nextPage": "Plus d'événements"
+            },
+            "details": {
+                "triggerTime": "({time} UTC)",
+                "nextTrigger": "Début <t:{timestamp}:R>",
+                "repeatNone": "Répétition: Aucune",
+                "repeatEvery": "Répétition: Toutes les {parts}",
+                "repeatWeekly": "Répétition: Hebdo - {days}",
+                "channel": "Canal: <#{channelId}>"
             }
         }
     },
@@ -2484,11 +2535,13 @@
                 "noNotificationsDeactivated": "Aucune notification n'a été désactivée.",
                 "updated": "Accès aux fonctionnalités mis à jour !",
                 "privateNotifications": "notifications privées",
-                "calculators": "calculatrices"
+                "calculators": "calculatrices",
+                "inspect": "inspection"
             },
             "buttons": {
                 "privateNotifications": "Notifications privées",
                 "calculators": "Calculatrices",
+                "inspect": "Inspection",
                 "whitelistChannels": "Canaux autorisés",
                 "everyone": "Tous les utilisateurs",
                 "admins": "Admins uniquement",
@@ -2518,8 +2571,18 @@
         "mainPage": {
             "content": {
                 "title": "### {emoji.1039} Support",
-                "description": "Si vous avez besoin d'aide pour le bot ou rencontrez des problèmes, n'hésitez pas à demander sur notre [Discord](https://discord.gg/A7ZVTFd4p9).\nPour un soutien émotionnel ou financier, vous pouvez m'offrir un café ici : [Buy Me A Coffee](https://buymeacoffee.com/wosland) {emoji.1039}"
+                "description": "Si vous avez besoin d'aide pour le bot ou rencontrez des problèmes, n'hésitez pas à demander sur notre [Discord](https://discord.gg/A7ZVTFd4p9) et si vous rencontrez des erreurs, cliquez sur le bouton \"Générer un rapport\".\nPour un soutien émotionnel ou financier, vous pouvez m'offrir un café ici : [Buy Me A Coffee](https://buymeacoffee.com/wosland) {emoji.1039}"
+            },
+            "buttons": {
+                "generateReport": "Générer un rapport"
             }
+        },
+        "report": {
+            "noErrors": "Aucune erreur récente trouvée dans les logs système.",
+            "dmSent": "Rapport d'erreurs envoyé dans vos messages privés.",
+            "dmFailed": "Impossible d'envoyer le rapport. Assurez-vous que vos MP sont ouverts.",
+            "discordButton": "Obtenir de l'aide",
+            "dmMessage": "**Rapport d'erreurs** — Généré <t:{time}:R>\nVeuillez transférer ce message au serveur de support en utilisant le bouton ci-dessous."
         }
     },
     "calculators": {
@@ -2529,10 +2592,15 @@
                 "BuildingsField": {
                     "name": "- **Calculatrice de bâtiments**",
                     "value": "  - Calcule les coûts et le temps nécessaires pour améliorer vos bâtiments."
+                },
+                "WarAcademyField": {
+                    "name": "- **Calculatrice d'Académie de guerre**",
+                    "value": "  - Calcule les coûts et le temps nécessaires pour améliorer vos compétences d'Académie de guerre."
                 }
             },
             "buttons": {
-                "buildings": "Bâtiments"
+                "buildings": "Bâtiments",
+                "warAcademy": "Académie de guerre"
             },
             "errors": {}
         },
@@ -2579,12 +2647,13 @@
                 "back": "Retour",
                 "prev": "Précédent",
                 "next": "Suivant",
-                "copy": "Copier"
+                "copy": "Copier",
+                "remove": "Supprimer"
             },
             "placeholders": {
                 "selectBuilding": "Sélectionnez un bâtiment",
-                "selectStartingLevel": "Sélectionnez le niveau de départ",
-                "selectTargetLevel": "Sélectionnez le niveau cible"
+                "selectStartingLevel": "Premier niveau à améliorer",
+                "selectTargetLevel": "Dernier niveau à améliorer"
             },
             "modal": {
                 "title": "Bonus du calculateur",
@@ -2622,8 +2691,14 @@
                     "placeholder": "ex. 150"
                 }
             },
+            "removeModal": {
+                "title": "Retirer du plan",
+                "label": "Sélectionnez les entrées à retirer",
+                "placeholder": "Sélectionner"
+            },
             "results": {
                 "upgradePlan": "### Plan d'amélioration",
+                "buildingsList": "- **Bâtiments**",
                 "resourcesRequired": "- **Ressources requises :**",
                 "buildTime": "- **Temps de construction :**",
                 "original": "  - Original : **{time}**",
@@ -2640,6 +2715,126 @@
             },
             "errors": {
                 "calcFailed": "{emoji.1050} Impossible de calculer le coût d'amélioration. Vérifiez vos sélections de niveaux.",
+                "noSummary": "Impossible de générer le résumé.",
+                "dmSent": "Résumé envoyé en message privé !"
+            }
+        },
+        "warAcademy": {
+            "content": {
+                "resources": {
+                    "meat": "Viande",
+                    "wood": "Bois",
+                    "coal": "Charbon",
+                    "iron": "Fer",
+                    "steel": "Acier",
+                    "fcShards": "Fragments FC"
+                },
+                "skills": {
+                    "infantry": {
+                        "flameSquad": "Escouade de flammes",
+                        "flameShield": "Bouclier de flammes",
+                        "flameStrike": "Frappe de flammes",
+                        "flameTomahawk": "Tomahawk de flammes",
+                        "flameProtection": "Protection de flammes",
+                        "flameLegion": "Légion de flammes",
+                        "helios": "Infanterie Hélios",
+                        "heliosHealing": "Guérison infanterie Hélios",
+                        "heliosTraining": "Entraînement infanterie Hélios",
+                        "heliosFirstAid": "Premiers soins infanterie Hélios"
+                    },
+                    "marksman": {
+                        "flameSquad": "Escouade de flammes",
+                        "crystalArmor": "Armure de cristal",
+                        "crystalVision": "Vision de cristal",
+                        "crystalArrow": "Flèche de cristal",
+                        "crystalProtection": "Protection de cristal",
+                        "flameLegion": "Légion de flammes",
+                        "helios": "Tireur d'élite Hélios",
+                        "heliosHealing": "Guérison tireur Hélios",
+                        "heliosTraining": "Entraînement tireur Hélios",
+                        "heliosFirstAid": "Premiers soins tireur Hélios"
+                    },
+                    "lancer": {
+                        "flameSquad": "Escouade de flammes",
+                        "blazingArmor": "Armure flamboyante",
+                        "blazingCharge": "Charge flamboyante",
+                        "blazingLance": "Lance flamboyante",
+                        "blazingGuardian": "Gardien flamboyant",
+                        "flameLegion": "Légion de flammes",
+                        "helios": "Lancier Hélios",
+                        "heliosHealing": "Guérison lancier Hélios",
+                        "heliosTraining": "Entraînement lancier Hélios",
+                        "heliosFirstAid": "Premiers soins lancier Hélios"
+                    }
+                }
+            },
+            "categories": {
+                "infantry": "Infanterie",
+                "marksman": "Tireur d'élite",
+                "lancer": "Lancier"
+            },
+            "levelDisplay": "Niveau {key}",
+            "header": {
+                "categorySelection": "### Calculatrice d'Académie de guerre\nSélectionnez la catégorie de troupes :",
+                "controls": "### Compétences {category}",
+                "from": "**De :** Niveau {level}",
+                "selected": "**Compétence :** {name}"
+            },
+            "buttons": {
+                "infantry": "Infanterie",
+                "marksman": "Tireur d'élite",
+                "lancer": "Lancier",
+                "buffs": "Bonus",
+                "back": "Retour",
+                "prev": "Préc",
+                "next": "Suiv",
+                "copy": "Copier",
+                "remove": "Supprimer"
+            },
+            "placeholders": {
+                "selectSkill": "Sélectionner une compétence",
+                "selectStartingLevel": "Premier niveau à rechercher",
+                "selectTargetLevel": "Dernier niveau à rechercher"
+            },
+            "modal": {
+                "title": "Bonus de recherche",
+                "vp": {
+                    "label": "Bonus vitesse de recherche VP",
+                    "placeholder": "Sélectionner le bonus VP",
+                    "off": "Désactivé",
+                    "vp10": "VP 10%",
+                    "vp15": "VP 15%"
+                },
+                "speed": {
+                    "label": "Vitesse de recherche %",
+                    "description": "Bonus de vitesse de recherche (ex : 150 pour 150%)",
+                    "placeholder": "ex : 150"
+                }
+            },
+            "removeModal": {
+                "title": "Retirer du plan",
+                "label": "Sélectionnez les entrées à retirer",
+                "placeholder": "Sélectionner"
+            },
+            "results": {
+                "upgradePlan": "### Plan de recherche",
+                "skillsList": "- **Compétences**",
+                "resourcesRequired": "- **Ressources requises :**",
+                "researchTime": "- **Temps de recherche :**",
+                "original": "  - Original : **{time}**",
+                "withBuffs": "  - Avec bonus : **{time}**",
+                "requirements": "- **Prérequis :**",
+                "warAcademy": "Académie de guerre",
+                "skillRequirements": " - **Compétences requises :**",
+                "buffGained": "- **Bonus obtenu :**",
+                "buffsLine": "- **Bonus de vitesse appliqués**\n  - {parts}",
+                "buffs": {
+                    "researchSpeed": "Vitesse de recherche : {pct}%",
+                    "vpBonus": "Bonus VP : +{pct}%"
+                }
+            },
+            "errors": {
+                "calcFailed": "Impossible de calculer le coût de recherche. Vérifiez vos sélections de niveaux.",
                 "noSummary": "Impossible de générer le résumé.",
                 "dmSent": "Résumé envoyé en message privé !"
             }

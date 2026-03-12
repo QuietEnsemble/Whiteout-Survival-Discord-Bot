@@ -223,6 +223,18 @@ const schemas = {
             language TEXT,
             custom_emoji INTEGER
         )
+    `,
+    schedule_boards: `
+        CREATE TABLE IF NOT EXISTS schedule_boards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild_id TEXT NOT NULL,
+            target_channel_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            scope TEXT NOT NULL DEFAULT 'server_wide',
+            filter_channel_id TEXT,
+            created_by TEXT NOT NULL,
+            created_at TEXT
+        )
     `
 };
 
@@ -246,6 +258,10 @@ try {
     // Create index for log_code for faster filtering
     db.exec(`CREATE INDEX IF NOT EXISTS idx_admin_logs_log_code ON admin_logs (log_code)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_admin_logs_user_id_time ON admin_logs (user_id, time)`);
+
+    // Create indexes for players table
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_players_alliance_exist ON players (alliance_id, exist)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_players_nickname ON players (nickname)`);
 
     // Initialize default test IDs
     const existingTestIds = db.prepare('SELECT COUNT(*) as count FROM test_ids').get();
@@ -458,8 +474,11 @@ const idChannelQueries = {
     // Get channel by id
     getChannelById: db.prepare('SELECT * FROM id_channels WHERE id = ?'),
 
-    // Get channel by channel_id (Discord channel ID)
+    // Get channel by channel_id (Discord channel ID) - single row
     getChannelByChannelId: db.prepare('SELECT * FROM id_channels WHERE channel_id = ?'),
+
+    // Get all channels by channel_id (for multi-alliance support)
+    getChannelsByChannelId: db.prepare('SELECT * FROM id_channels WHERE channel_id = ?'),
 
     // Delete channel
     deleteChannel: db.prepare('DELETE FROM id_channels WHERE id = ?'),
@@ -776,6 +795,20 @@ const notificationQueries = {
 
     // Delete notification
     deleteNotification: db.prepare('DELETE FROM notifications WHERE id = ?')
+};
+
+// Schedule board queries
+const scheduleBoardQueries = {
+    addBoard: db.prepare(`
+        INSERT INTO schedule_boards (guild_id, target_channel_id, message_id, scope, filter_channel_id, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `),
+    getBoardById: db.prepare('SELECT * FROM schedule_boards WHERE id = ?'),
+    getBoardsByGuild: db.prepare('SELECT * FROM schedule_boards WHERE guild_id = ?'),
+    getBoardByMessage: db.prepare('SELECT * FROM schedule_boards WHERE message_id = ?'),
+    updateBoardMessage: db.prepare('UPDATE schedule_boards SET message_id = ? WHERE id = ?'),
+    deleteBoard: db.prepare('DELETE FROM schedule_boards WHERE id = ?'),
+    deleteBoardsByGuild: db.prepare('DELETE FROM schedule_boards WHERE guild_id = ?')
 };
 
 // Alliance logs queries
@@ -1173,6 +1206,7 @@ module.exports = {
         getChannelsByAllianceIds: (allianceIds) => idChannelQueries.getChannelsByAllianceIds.all(JSON.stringify(allianceIds)),
         getChannelById: (id) => idChannelQueries.getChannelById.get(id),
         getChannelByChannelId: (channelId) => idChannelQueries.getChannelByChannelId.get(channelId),
+        getChannelsByChannelId: (channelId) => idChannelQueries.getChannelsByChannelId.all(channelId),
         removeIdChannel: (id) => idChannelQueries.deleteChannel.run(id),
         deleteChannel: (id) => idChannelQueries.deleteChannel.run(id),
         getAllChannels: () => idChannelQueries.getAllChannels.all(),
@@ -1344,6 +1378,17 @@ module.exports = {
         updateNotificationActiveStatus: (id, isActive) => notificationQueries.updateNotificationActiveStatus.run(isActive ? 1 : 0, id),
         updateNotificationCompletedStatus: (id, completed) => notificationQueries.updateNotificationCompletedStatus.run(completed ? 1 : 0, id),
         deleteNotification: (id) => notificationQueries.deleteNotification.run(id)
+    },
+    scheduleBoardQueries: {
+        ...scheduleBoardQueries,
+        addBoard: (guildId, targetChannelId, messageId, scope, filterChannelId, createdBy) =>
+            scheduleBoardQueries.addBoard.run(guildId, targetChannelId, messageId, scope, filterChannelId, createdBy, getCurrentTimestamp()),
+        getBoardById: (id) => scheduleBoardQueries.getBoardById.get(id),
+        getBoardsByGuild: (guildId) => scheduleBoardQueries.getBoardsByGuild.all(guildId),
+        getBoardByMessage: (messageId) => scheduleBoardQueries.getBoardByMessage.get(messageId),
+        updateBoardMessage: (id, messageId) => scheduleBoardQueries.updateBoardMessage.run(messageId, id),
+        deleteBoard: (id) => scheduleBoardQueries.deleteBoard.run(id),
+        deleteBoardsByGuild: (guildId) => scheduleBoardQueries.deleteBoardsByGuild.run(guildId)
     },
     allianceLogQueries: {
         ...allianceLogQueries,

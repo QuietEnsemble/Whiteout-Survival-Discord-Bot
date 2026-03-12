@@ -24,6 +24,7 @@ const panel = require('../functions/Panel/backToPanel');
 const alliance = require('../functions/Alliance/Alliance');
 const players = require('../functions/Players/players');
 const support = require('../functions/Support/support');
+const report = require('../functions/Support/report');
 const { processRecovery } = require('../functions/Processes/processRecovery');
 
 const addPlayer = require('../functions/Players/addPlayer');
@@ -64,7 +65,9 @@ const notificationSettings = require('../functions/Notification/notificationSett
 const templateLibrary = require('../functions/Notification/templateLibrary');
 const shareNotification = require('../functions/Notification/shareNotification');
 const uploadNotification = require('../functions/Notification/uploadNotification');
+const scheduleView = require('../functions/Notification/scheduleView');
 const buildings = require('../functions/Calculators/Buildings/buildings');
+const warAcademy = require('../functions/Calculators/WarAcademy/warAcademy');
 const calculators = require('../functions/Calculators/calculators');
 
 
@@ -129,6 +132,7 @@ const buttonHandlers = [
     { pattern: /^emoji_activate_personal_/, fn: emojisActivate.handleEmojiActivateChoice },
     { pattern: /^pagination_emoji_activate_/, fn: emojisActivate.handleEmojiActivatePagination },
     { pattern: /^emoji_theme_/, fn: emojis.handleEmojiThemeButton },
+    { pattern: /^support_report_/, fn: report.handleGenerateReport },
     { pattern: /^support_/, fn: support.handleSupportButton },
 
     // Alliance management
@@ -185,6 +189,7 @@ const buttonHandlers = [
     { pattern: /^view_failed_players_/, fn: fetchPlayerData.handleViewFailedPlayersButton },
     { pattern: /^id_channel_manage_/, fn: idChannel.handleIdChannelButton },
     { pattern: /^id_channel_add_/, fn: idChannel.handleIdChannelAdd },
+    { pattern: /^(id_channel_msg_prev_|id_channel_msg_next_)/, fn: idChannel.handleIdChannelMessagePagination },
     { pattern: /^id_channel_remove_/, fn: idChannel.handleIdChannelRemove },
     { pattern: /^(id_channel_prev_|id_channel_next_)/, fn: idChannel.handleIdChannelPagination },
     { pattern: /^(id_channel_remove_prev_|id_channel_remove_next_)/, fn: idChannel.handleIdChannelRemovePagination },
@@ -294,16 +299,36 @@ const buttonHandlers = [
     { pattern: /^template_import_type_/, fn: uploadNotification.handleImportTypeSelection },
     { pattern: /^pagination_template_export_/, fn: shareNotification.handleExportPagination },
 
+    // Schedule View
+    { pattern: /^schedule_board_page_/, fn: scheduleView.handleBoardPageButton },
+    { pattern: /^schedule_board_scope_/, fn: scheduleView.handleBoardScopeSelection },
+    { pattern: /^schedule_board_send_/, fn: scheduleView.handleScheduleBoardSend },
+    { pattern: /^schedule_edit_/, fn: scheduleView.handleScheduleEditButton },
+    { pattern: /^schedule_type_/, fn: scheduleView.handleScheduleTypeSelection },
+    { pattern: /^schedule_view_/, fn: scheduleView.handleScheduleViewButton },
+    { pattern: /^pagination_schedule_view_/, fn: scheduleView.handleScheduleViewPagination },
+
     // Calculators
     { pattern: /^calc_main_panel_/, fn: calculators.handleCalcMainPanel },
     { pattern: /^calc_bld_copy_/, fn: buildings.handleBuildingCopyButton },
+    { pattern: /^calc_bld_remove_/, fn: buildings.handleRemoveButton },
     { pattern: /^calc_bld_fprev_|^calc_bld_fnext_/, fn: buildings.handleBuildingFromLevelPage },
     { pattern: /^calc_bld_tprev_|^calc_bld_tnext_/, fn: buildings.handleBuildingToLevelPage },
     { pattern: /^calc_building_buffs_/, fn: buildings.handleBuildingBuffsButton },
     { pattern: /^calc_building_back_/, fn: calculators.handleBuildingBackButton },
     { pattern: /^calc_building_basic_/, fn: buildings.handleBuildingTypeSelection },
     { pattern: /^calc_building_fc_/, fn: buildings.handleBuildingTypeSelection },
-    { pattern: /^calc_main_buildings_/, fn: buildings.handleBuildingsButton }
+    { pattern: /^calc_main_buildings_/, fn: buildings.handleBuildingsButton },
+
+    // War Academy calculator
+    { pattern: /^calc_wa_copy_/, fn: warAcademy.handleCopyButton },
+    { pattern: /^calc_wa_remove_/, fn: warAcademy.handleRemoveButton },
+    { pattern: /^calc_wa_fprev_|^calc_wa_fnext_/, fn: warAcademy.handleFromLevelPage },
+    { pattern: /^calc_wa_tprev_|^calc_wa_tnext_/, fn: warAcademy.handleToLevelPage },
+    { pattern: /^calc_wa_buffs_/, fn: warAcademy.handleBuffsButton },
+    { pattern: /^calc_wa_back_/, fn: warAcademy.handleBackButton },
+    { pattern: /^calc_wa_cat_/, fn: warAcademy.handleCategorySelection },
+    { pattern: /^calc_main_wa_/, fn: warAcademy.handleWarAcademyButton }
 ];
 
 // === SETUP FUNCTION ===

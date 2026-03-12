@@ -32,7 +32,7 @@ const ITEMS_PER_PAGE = 20;
 function createEditNotificationButton(userId, lang) {
     return new ButtonBuilder()
         .setCustomId(`notification_edit_main_${userId}`)
-        .setLabel(lang.notification.editNotification.buttons.editNotification)
+        .setLabel(lang.notification.mainPage.buttons.editNotification)
         .setStyle(ButtonStyle.Secondary)
         .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1008'));
 }

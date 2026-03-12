@@ -46,70 +46,62 @@ function createEmojiThemeButton(userId, lang = {}) {
  */
 function createEmojiThemeContainer(userId, lang, adminData) {
 	const hasFullPermissions = hasPermission(adminData, PERMISSIONS.FULL_ACCESS);
+	const tc = lang.settings.theme.mainPage.content;
 
-	const EmojiCreateButton = createEmojiCreateButton(userId, lang);
-	if (!hasFullPermissions) EmojiCreateButton.setDisabled(true);
+	let actionRows;
+	let contentText;
 
-	const EmojiEditButton = createEmojiEditButton(userId, lang);
-	if (!hasFullPermissions) EmojiEditButton.setDisabled(true);
+	if (hasFullPermissions) {
+		const actionRow1 = new ActionRowBuilder().addComponents(
+			createEmojiCreateButton(userId, lang),
+			createEmojiEditButton(userId, lang),
+			createEmojiViewButton(userId, lang),
+			createEmojiTemplateButton(userId, lang)
+		);
+		const actionRow2 = new ActionRowBuilder().addComponents(
+			createEmojiDeleteButton(userId, lang),
+			createEmojiReloadButton(userId, lang),
+			createEmojiActivateButton(userId, lang),
+			createBackToSettingsButton(userId, lang)
+		);
+		actionRows = [actionRow1, actionRow2];
 
-	const TemplateButton = createEmojiTemplateButton(userId, lang);
-	if (!hasFullPermissions) TemplateButton.setDisabled(true);
+		contentText =
+			`${tc.title}\n` +
+			`${tc.description}\n` +
+			`${tc.addPackField.name}\n${tc.addPackField.value}\n` +
+			`${tc.editPackField.name}\n${tc.editPackField.value}\n` +
+			`${tc.viewPackField.name}\n${tc.viewPackField.value}\n` +
+			`${tc.templateLibraryField.name}\n${tc.templateLibraryField.value}\n` +
+			`${tc.deletePackField.name}\n${tc.deletePackField.value}\n` +
+			`${tc.reloadDefaultsField.name}\n${tc.reloadDefaultsField.value}\n` +
+			`${tc.activatePackField.name}\n${tc.activatePackField.value}\n`;
+	} else {
+		actionRows = [
+			new ActionRowBuilder().addComponents(
+				createEmojiActivateButton(userId, lang),
+				createEmojiViewButton(userId, lang),
+				createBackToSettingsButton(userId, lang)
+			)
+		];
 
-	const DeleteButton = createEmojiDeleteButton(userId, lang);
-	if (!hasFullPermissions) DeleteButton.setDisabled(true);
-
-	const EmojiReloadButton = createEmojiReloadButton(userId, lang);
-	if (!hasFullPermissions) EmojiReloadButton.setDisabled(true);
-
-	const actionRow1 = new ActionRowBuilder().addComponents(
-		EmojiCreateButton,
-		EmojiEditButton,
-		createEmojiViewButton(userId, lang),
-		TemplateButton
-	);
-
-	const actionRow2 = new ActionRowBuilder().addComponents(
-		DeleteButton,
-		EmojiReloadButton,
-		createEmojiActivateButton(userId, lang),
-		createBackToSettingsButton(userId, lang)
-	);
+		contentText =
+			`${tc.title}\n` +
+			`${tc.description}\n` +
+			`${tc.viewPackField.name}\n${tc.viewPackField.value}\n` +
+			`${tc.activatePackField.name}\n${tc.activatePackField.value}\n`;
+	}
 
 	return [
 		new ContainerBuilder()
 			.setAccentColor(0x8e44ad)
 			.addTextDisplayComponents(
-				new TextDisplayBuilder().setContent(
-					`${lang.settings.theme.mainPage.content.title}\n` +
-					`${lang.settings.theme.mainPage.content.description}\n` +
-
-					`${lang.settings.theme.mainPage.content.addPackField.name}\n` +
-					`${lang.settings.theme.mainPage.content.addPackField.value}\n` +
-
-					`${lang.settings.theme.mainPage.content.editPackField.name}\n` +
-					`${lang.settings.theme.mainPage.content.editPackField.value}\n` +
-
-					`${lang.settings.theme.mainPage.content.viewPackField.name}\n` +
-					`${lang.settings.theme.mainPage.content.viewPackField.value}\n` +
-
-					`${lang.settings.theme.mainPage.content.templateLibraryField.name}\n` +
-					`${lang.settings.theme.mainPage.content.templateLibraryField.value}\n` +
-
-					`${lang.settings.theme.mainPage.content.deletePackField.name}\n` +
-					`${lang.settings.theme.mainPage.content.deletePackField.value}\n` +
-
-					`${lang.settings.theme.mainPage.content.reloadDefaultsField.name}\n` +
-					`${lang.settings.theme.mainPage.content.reloadDefaultsField.value}\n` +
-
-					`${lang.settings.theme.mainPage.content.activatePackField.name}\n` +
-					`${lang.settings.theme.mainPage.content.activatePackField.value}\n`
-				)
+				new TextDisplayBuilder().setContent(contentText)
 			)
 			.addSeparatorComponents(
 				new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
 			)
-			.addActionRowComponents(actionRow1, actionRow2)
+			.addActionRowComponents(...actionRows)
 	];
 }
 

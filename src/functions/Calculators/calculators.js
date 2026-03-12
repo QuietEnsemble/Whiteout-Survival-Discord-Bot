@@ -29,11 +29,19 @@ function createCalculatorsButton(userId, lang = {}) {
  */
 function buildCalculatorsPanel(userId) {
     const { lang } = getUserInfo(userId);
+    const emojiMap = getEmojiMapForUser(userId);
+
     const buildingsBtn = new ButtonBuilder()
         .setCustomId(`calc_main_buildings_${userId}`)
         .setLabel(lang.calculators.mainPage.buttons.buildings)
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji(getComponentEmoji(getEmojiMapForUser(userId), '1040'));
+        .setEmoji(getComponentEmoji(emojiMap, '1040'));
+
+    const waBtn = new ButtonBuilder()
+        .setCustomId(`calc_main_wa_${userId}`)
+        .setLabel(lang.calculators.mainPage.buttons.warAcademy)
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji(getComponentEmoji(emojiMap, '1012'));
 
     const backBtn = createBackToPanelButton(userId, lang);
 
@@ -44,14 +52,17 @@ function buildCalculatorsPanel(userId) {
                `${lang.calculators.mainPage.content.title}\n` +
 
                `${lang.calculators.mainPage.content.BuildingsField.name}\n` +
-               `${lang.calculators.mainPage.content.BuildingsField.value}`
+               `${lang.calculators.mainPage.content.BuildingsField.value}\n` +
+
+               `${lang.calculators.mainPage.content.WarAcademyField.name}\n` +
+               `${lang.calculators.mainPage.content.WarAcademyField.value}`
             )
         )
         .addSeparatorComponents(
             new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
         )
         .addActionRowComponents(
-            new ActionRowBuilder().addComponents(buildingsBtn, backBtn)
+            new ActionRowBuilder().addComponents(buildingsBtn, waBtn, backBtn)
         );
 }
 
