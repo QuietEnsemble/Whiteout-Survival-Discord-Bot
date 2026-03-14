@@ -172,7 +172,7 @@ class NotificationScheduler {
                                     notification_name: notification.name,
                                     old_trigger: notification.next_trigger,
                                     new_trigger: nextTrigger,
-                                    frequency: frequency,
+                                    frequency: notification.repeat_frequency,
                                     function: 'NotificationScheduler.initialize'
                                 })
                             );
