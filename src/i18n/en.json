@@ -1141,13 +1141,18 @@
 				"scheduleViewField": {
 					"name": "- **Schedule View**",
 					"value": "  - View upcoming scheduled notifications"
+				},
+				"autoCleanField": {
+					"name": "- **Auto Clean**",
+					"value": "  - Automatically delete sent notification messages after a set time"
 				}
 			},
 			"buttons": {
 				"createNotification": "Create",
 				"deleteNotification": "Delete",
 				"editNotification": "Edit",
-				"scheduleView": "Schedule"
+				"scheduleView": "Schedule",
+				"autoClean": "Auto Clean"
 			}
 		},
 		"createNotification": {
@@ -1715,6 +1720,46 @@
 				"invalidDateFormat": "{emoji.1050} Invalid date format. Use DD/MM/YYYY (e.g., 25/12/2024)",
 				"invalidTimeFormat": "{emoji.1050} Invalid time format. Use HH:MM:SS (e.g., 14:30:00)",
 				"invalidDateTime": "{emoji.1050} Invalid date or time values. Please check your input."
+			}
+		},
+		"autoClean": {
+			"content": {
+				"title": "### {emoji.1022} Auto Clean",
+				"description": "Automatically delete sent notification messages after a configured delay.",
+				"statusEnabled": "- **Status:** Enabled",
+				"statusDisabled": "- **Status:** Disabled",
+				"frequency": "- **Delete After:** {frequency}",
+				"frequencyNotSet": "- **Delete After:** Not set",
+				"channelsTitle": "### {emoji.1022} Auto Clean Channels",
+				"channelsDescription": "Select which notification channels should have their messages auto-deleted.",
+				"noChannels": "No notification channels found.",
+				"channelSelected": "{emoji.1004} <#{channelId}>",
+				"channelNotSelected": "{emoji.1051} <#{channelId}>"
+			},
+			"buttons": {
+				"channels": "Channels",
+				"toggle": "Enable",
+				"toggleDisable": "Disable",
+				"frequency": "Frequency"
+			},
+			"selectMenu": {
+				"placeholder": "Select channels for auto clean...",
+				"page": "Page {current}/{total}"
+			},
+			"modal": {
+				"title": "Auto Clean Frequency",
+				"frequencyLabel": "Delete after (e.g. 30m, 2h, 1d)",
+				"frequencyPlaceholder": "30m, 1h, 6h, 1d (max: 7d)"
+			},
+			"errors": {
+				"invalidFrequency": "{emoji.1050} Invalid frequency format. Use formats like: 30m, 1h, 6h, 1d (max 7 days).",
+				"frequencyTooLong": "{emoji.1050} Frequency cannot exceed 7 days."
+			},
+			"success": {
+				"channelsUpdated": "{emoji.1004} Auto clean channels updated.",
+				"enabled": "{emoji.1004} Auto clean enabled.",
+				"disabled": "{emoji.1004} Auto clean disabled.",
+				"frequencyUpdated": "{emoji.1004} Auto clean frequency set to {frequency}."
 			}
 		},
 		"scheduleView": {

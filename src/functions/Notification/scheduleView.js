@@ -241,7 +241,8 @@ function buildScheduleContainer(notifications, type, page, userId, lang) {
 
             for (let i = 0; i < section.items.length; i++) {
                 const n = section.items[i];
-                const timeStr = `${String(n.hour).padStart(2, '0')}:${String(n.minute).padStart(2, '0')}`;
+                const triggerDate = new Date(n.next_trigger * 1000);
+                const timeStr = `${String(triggerDate.getUTCHours()).padStart(2, '0')}:${String(triggerDate.getUTCMinutes()).padStart(2, '0')}`;
 
                 let details = `- ${n.name} ${sv.details.triggerTime.replace('{time}', timeStr)}\n`;
                 details += `  - ${sv.details.nextTrigger.replace('{timestamp}', Math.floor(n.next_trigger))}\n`;

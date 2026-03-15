@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { notificationQueries, systemLogQueries } = require('../utility/database');
 const { handleError } = require('../utility/commonFunctions');
+const { trackSentMessage } = require('./autoClean');
 
 /**
  * Parse existing mentions from notification
@@ -466,10 +467,15 @@ class NotificationScheduler {
             }
 
             // Send the notification
-            await target.send({
+            const sentMsg = await target.send({
                 content: messageContent,
                 embeds: embed ? [embed] : []
             });
+
+            // Track sent message for auto-clean (server notifications only)
+            if (currentNotification.channel_id && sentMsg) {
+                trackSentMessage(notification.id, currentNotification.channel_id, sentMsg.id, scheduledTime);
+            }
 
             // Only update database and reschedule on the LAST send (at scheduled time)
             if (isLastSend) {

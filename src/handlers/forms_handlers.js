@@ -14,6 +14,7 @@ const notificationEditor = require('../functions/Notification/notificationEditor
 const notificationFields = require('../functions/Notification/notificationFields');
 const notificationSettings = require('../functions/Notification/notificationSettings');
 const uploadNotification = require('../functions/Notification/uploadNotification');
+const notifAutoClean = require('../functions/Notification/autoClean');
 const emojisCreate = require('../functions/Settings/theme/emojisCreate');
 const emojisEditor = require('../functions/Settings/theme/emojisEditor');
 const emojisUpload = require('../functions/Settings/theme/emojisImport');
@@ -56,6 +57,7 @@ const formHandlers = [
     { pattern: /^notification_edit_info_modal_/, fn: editNotification.handleInfoModal },
     { pattern: /^template_upload_file_modal_/, fn: uploadNotification.handleFileUploadModalSubmit },
     { pattern: /^template_import_modal_/, fn: uploadNotification.handleImportModalSubmit },
+    { pattern: /^notif_ac_freq_modal_/, fn: notifAutoClean.handleAutoCleanFreqModal },
     { pattern: /^emoji_create_modal_/, fn: emojisCreate.handleEmojiCreateModal },
     { pattern: /^emoji_editor_modal_/, fn: emojisEditor.handleEmojiEditorModal },
     { pattern: /^emoji_upload_modal_/, fn: emojisUpload.handleEmojiUploadModal },

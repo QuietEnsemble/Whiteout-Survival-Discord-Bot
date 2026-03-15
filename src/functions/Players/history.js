@@ -11,7 +11,8 @@ const {
     StringSelectMenuBuilder,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    LabelBuilder
 } = require('discord.js');
 const { allianceQueries, playerQueries, furnaceChangeQueries, nicknameChangeQueries } = require('../utility/database');
 const { PERMISSIONS } = require('../Settings/admin/permissions');
@@ -368,13 +369,16 @@ async function handleHistoryByIdButton(interaction) {
 
         const idInput = new TextInputBuilder()
             .setCustomId('player_id_input')
-            .setLabel(lang.players.history.modal.label)
             .setPlaceholder(lang.players.history.modal.placeholder)
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(20);
 
-        modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+        const idLabel = new LabelBuilder()
+            .setLabel(lang.players.history.modal.label)
+            .setTextInputComponent(idInput);
+
+        modal.addLabelComponents(idLabel);
         await interaction.showModal(modal);
     } catch (error) {
         await handleError(interaction, lang, error, 'handleHistoryByIdButton');
@@ -404,13 +408,16 @@ async function handleHistorySearchButton(interaction) {
 
         const idInput = new TextInputBuilder()
             .setCustomId('player_id_input')
-            .setLabel(lang.players.history.modal.label)
             .setPlaceholder(lang.players.history.modal.placeholder)
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(20);
 
-        modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+        const idLabel = new LabelBuilder()
+            .setLabel(lang.players.history.modal.label)
+            .setTextInputComponent(idInput);
+
+        modal.addLabelComponents(idLabel);
         await interaction.showModal(modal);
     } catch (error) {
         await handleError(interaction, lang, error, 'handleHistorySearchButton');

@@ -66,6 +66,7 @@ const templateLibrary = require('../functions/Notification/templateLibrary');
 const shareNotification = require('../functions/Notification/shareNotification');
 const uploadNotification = require('../functions/Notification/uploadNotification');
 const scheduleView = require('../functions/Notification/scheduleView');
+const notifAutoClean = require('../functions/Notification/autoClean');
 const buildings = require('../functions/Calculators/Buildings/buildings');
 const warAcademy = require('../functions/Calculators/WarAcademy/warAcademy');
 const calculators = require('../functions/Calculators/calculators');
@@ -298,6 +299,13 @@ const buttonHandlers = [
     { pattern: /^template_upload_/, fn: uploadNotification.handleUploadNotificationButton },
     { pattern: /^template_import_type_/, fn: uploadNotification.handleImportTypeSelection },
     { pattern: /^pagination_template_export_/, fn: shareNotification.handleExportPagination },
+
+    // Notification Auto-Clean
+    { pattern: /^notif_ac_toggle_/, fn: notifAutoClean.handleAutoCleanToggle },
+    { pattern: /^notif_ac_freq_/, fn: notifAutoClean.handleAutoCleanFreqButton },
+    { pattern: /^notif_ac_channels_/, fn: notifAutoClean.handleAutoCleanChannelsButton },
+    { pattern: /^notif_ac_ch_prev_|^notif_ac_ch_next_/, fn: notifAutoClean.handleChannelPagination },
+    { pattern: /^notif_auto_clean_/, fn: notifAutoClean.handleAutoCleanButton },
 
     // Schedule View
     { pattern: /^schedule_board_page_/, fn: scheduleView.handleBoardPageButton },

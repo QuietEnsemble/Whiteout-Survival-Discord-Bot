@@ -14,6 +14,7 @@ const { createEditNotificationButton } = require('./editNotification');
 const { createDeleteNotificationButton } = require('./deleteNotification');
 const { createTemplateLibraryButton } = require('./templateLibrary');
 const { createScheduleViewButton } = require('./scheduleView');
+const { createAutoCleanButton } = require('./autoClean');
 const { getUserInfo, assertUserMatches, handleError, hasPermission } = require('../utility/commonFunctions');
 const { getEmojiMapForUser, getComponentEmoji } = require('../utility/emojis');
 const { checkFeatureAccess } = require('../utility/checkAccess');
@@ -52,12 +53,14 @@ function createNotificationContainer(interaction) {
     const deleteNotificationButtonInstance = createDeleteNotificationButton(interaction.user.id, lang);
     const templateLibraryButtonInstance = createTemplateLibraryButton(interaction.user.id, lang);
     const scheduleViewButtonInstance = createScheduleViewButton(interaction.user.id, lang);
+    const autoCleanButtonInstance = createAutoCleanButton(interaction.user.id, lang);
 
     if (!hasServerPermission && !hasPrivateFeature) {
         createNotificationButtonInstance.setDisabled(true);
         editNotificationButtonInstance.setDisabled(true);
         deleteNotificationButtonInstance.setDisabled(true);
         scheduleViewButtonInstance.setDisabled(true);
+        autoCleanButtonInstance.setDisabled(true);
     }
 
 
@@ -72,6 +75,7 @@ function createNotificationContainer(interaction) {
     const actionRow2 = new ActionRowBuilder()
         .addComponents(
             scheduleViewButtonInstance,
+            autoCleanButtonInstance,
             returnedBackButton
         );
 
@@ -96,7 +100,10 @@ function createNotificationContainer(interaction) {
                     `${lang.notification.mainPage.content.templateLibraryField.value}\n` +
 
                     `${lang.notification.mainPage.content.scheduleViewField.name}\n` +
-                    `${lang.notification.mainPage.content.scheduleViewField.value}\n`
+                    `${lang.notification.mainPage.content.scheduleViewField.value}\n` +
+
+                    `${lang.notification.mainPage.content.autoCleanField.name}\n` +
+                    `${lang.notification.mainPage.content.autoCleanField.value}\n`
                 )
             )
             .addSeparatorComponents(

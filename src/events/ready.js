@@ -7,6 +7,7 @@ const { initializeNotificationScheduler } = require('../functions/Notification/n
 const { initializeBackupScheduler } = require('../functions/Settings/backup/backupScheduler');
 const { initializeIdChannelCache } = require('../functions/Players/idChannel');
 const { autoCleanScheduler } = require('../functions/Players/idChannelAutoClean');
+const { startAutoCleanScheduler: startNotifAutoClean } = require('../functions/Notification/autoClean');
 const { initializeGiftCodeChannelCache } = require('../functions/GiftCode/giftCodeChannel');
 const { initializeEmojiPacks } = require('../functions/Settings/theme/emojisUploader');
 const { adminUsernameCache } = require('../functions/utility/adminUsernameCache');
@@ -108,6 +109,13 @@ module.exports = {
             autoCleanScheduler.initialize(client);
         } catch (error) {
             console.error('Failed to initialize auto-clean scheduler:', error);
+        }
+
+        // Initialize notification auto-clean scheduler
+        try {
+            startNotifAutoClean(client);
+        } catch (error) {
+            console.error('Failed to initialize notification auto-clean scheduler:', error);
         }
 
         // Initialize gift code channel cache

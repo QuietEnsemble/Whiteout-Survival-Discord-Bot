@@ -6,19 +6,27 @@ const { spawn, execSync } = require('child_process');
 
 // Auto-restart with optimization flags if not present
 if (!global.gc) {
-    const child = spawn('node', [
-        '--expose-gc',
-        '--max-old-space-size=256',
-        ...process.argv.slice(1)
-    ], {
-        stdio: 'inherit',
-        cwd: process.cwd()
-    });
+    function spawnChild() {
+        const child = spawn('node', [
+            '--expose-gc',
+            '--max-old-space-size=256',
+            ...process.argv.slice(1)
+        ], {
+            stdio: 'inherit',
+            cwd: process.cwd(),
+            env: { ...process.env, WOS_SELF_UPDATE: '1' }
+        });
 
-    child.on('exit', (code) => {
-        process.exit(code);
-    });
-
+        child.on('exit', (code) => {
+            if (code === 42) {
+                console.log('[starter] Self-update detected — restarting with updated starter.js...');
+                spawnChild();
+            } else {
+                process.exit(code);
+            }
+        });
+    }
+    spawnChild();
     return; // Exit parent process
 }
 
@@ -275,7 +283,7 @@ function getFileHash(filePath) {
  * @returns {{updated: number, skipped: number, added: number}}
  */
 function copyUpdatedFiles(srcDir, destDir, protectedPaths = new Set()) {
-    let stats = { updated: 0, skipped: 0, added: 0 };
+    let stats = { updated: 0, skipped: 0, added: 0, starterChanged: false };
 
     if (!fs.existsSync(srcDir)) return stats;
 
@@ -310,6 +318,7 @@ function copyUpdatedFiles(srcDir, destDir, protectedPaths = new Set()) {
             stats.updated += subStats.updated;
             stats.skipped += subStats.skipped;
             stats.added += subStats.added;
+            if (subStats.starterChanged) stats.starterChanged = true;
 
         } else if (entry.isFile()) {
             const srcHash = getFileHash(srcPath);
@@ -320,11 +329,13 @@ function copyUpdatedFiles(srcDir, destDir, protectedPaths = new Set()) {
                 fs.copyFileSync(srcPath, destPath);
                 console.log(`[UPDATE] Added: ${relativePath}`);
                 stats.added++;
+                if (entry.name === 'starter.js') stats.starterChanged = true;
             } else if (srcHash !== destHash) {
                 // File changed, update it
                 fs.copyFileSync(srcPath, destPath);
                 console.log(`[UPDATE] Updated: ${relativePath}`);
                 stats.updated++;
+                if (entry.name === 'starter.js') stats.starterChanged = true;
             } else {
                 // File unchanged, skip
                 stats.skipped++;
@@ -489,6 +500,20 @@ async function applyUpdate() {
         if (fs.existsSync(updateZipPath)) fs.unlinkSync(updateZipPath);
         if (fs.existsSync(updateExtractDir)) {
             fs.rmSync(updateExtractDir, { recursive: true, force: true });
+        }
+
+        // If starter.js itself was updated and parent supports self-update loop, exit with code 42 to trigger re-spawn
+        if (stats.starterChanged) {
+            if (process.env.WOS_SELF_UPDATE === '1') {
+                console.log('\n[UPDATE] starter.js was updated — restarting process to apply entry-point changes...');
+                setTimeout(() => process.exit(42), 500);
+                return {
+                    success: true,
+                    message: `Update applied successfully! ${stats.updated} files updated, ${stats.added} files added. starter.js changed — restarting automatically...`
+                };
+            } else {
+                console.log('\n[UPDATE] starter.js was updated — a full manual restart is required to apply entry-point changes.');
+            }
         }
 
         return {

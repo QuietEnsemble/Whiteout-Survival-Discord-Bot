@@ -235,6 +235,22 @@ const schemas = {
             created_by TEXT NOT NULL,
             created_at TEXT
         )
+    `,
+    notification_messages: `
+        CREATE TABLE IF NOT EXISTS notification_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            notification_id INTEGER NOT NULL,
+            channel_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            trigger_time INTEGER NOT NULL,
+            sent_at INTEGER NOT NULL
+        )
+    `,
+    notification_auto_clean: `
+        CREATE TABLE IF NOT EXISTS notification_auto_clean (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL UNIQUE
+        )
     `
 };
 
@@ -349,6 +365,23 @@ try {
     } catch (e) {
         console.error('Database migration: failed to add auto_clean column to id_channels', e);
     }
+
+    // Ensure notification auto-clean columns exist in settings
+    try {
+        const settingsCols = db.prepare('PRAGMA table_info(settings)').all();
+        if (!settingsCols.some(c => c.name === 'notif_auto_clean')) {
+            db.exec('ALTER TABLE settings ADD COLUMN notif_auto_clean BOOLEAN DEFAULT 0');
+        }
+        if (!settingsCols.some(c => c.name === 'notif_auto_clean_freq')) {
+            db.exec('ALTER TABLE settings ADD COLUMN notif_auto_clean_freq INTEGER DEFAULT 0');
+        }
+    } catch (e) {
+        console.error('Database migration: failed to add notif_auto_clean columns to settings', e);
+    }
+
+    // Create indexes for notification_messages table
+    db.exec('CREATE INDEX IF NOT EXISTS idx_notif_msgs_trigger ON notification_messages (trigger_time)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_notif_msgs_channel ON notification_messages (channel_id)');
 } catch (error) {
     console.error('FATAL: Database initialization failed:', error);
     process.exit(1);
@@ -821,6 +854,27 @@ const scheduleBoardQueries = {
     deleteBoardsByGuild: db.prepare('DELETE FROM schedule_boards WHERE guild_id = ?')
 };
 
+// Notification message tracking queries (for auto-clean)
+const notifMessageQueries = {
+    addMessage: db.prepare(`
+        INSERT INTO notification_messages (notification_id, channel_id, message_id, trigger_time, sent_at)
+        VALUES (?, ?, ?, ?, ?)
+    `),
+    getMessagesByTriggerTime: db.prepare('SELECT * FROM notification_messages WHERE trigger_time <= ? AND channel_id IN (SELECT channel_id FROM notification_auto_clean)'),
+    deleteMessage: db.prepare('DELETE FROM notification_messages WHERE id = ?'),
+    deleteByNotification: db.prepare('DELETE FROM notification_messages WHERE notification_id = ?'),
+    deleteOlderThan: db.prepare('DELETE FROM notification_messages WHERE trigger_time < ?')
+};
+
+// Notification auto-clean channel queries
+const notifAutoCleanQueries = {
+    addChannel: db.prepare('INSERT OR IGNORE INTO notification_auto_clean (channel_id) VALUES (?)'),
+    removeChannel: db.prepare('DELETE FROM notification_auto_clean WHERE channel_id = ?'),
+    getChannel: db.prepare('SELECT * FROM notification_auto_clean WHERE channel_id = ?'),
+    getAllChannels: db.prepare('SELECT * FROM notification_auto_clean'),
+    clearAll: db.prepare('DELETE FROM notification_auto_clean')
+};
+
 // Alliance logs queries
 const allianceLogQueries = {
     // Add log channel
@@ -1099,7 +1153,11 @@ const settingsQueries = {
     // Set Google Drive token
     setGDriveToken: db.prepare('UPDATE settings SET gdrive_token = ? WHERE id = 1'),
     // Clear Google Drive token
-    clearGDriveToken: db.prepare('UPDATE settings SET gdrive_token = NULL WHERE id = 1')
+    clearGDriveToken: db.prepare('UPDATE settings SET gdrive_token = NULL WHERE id = 1'),
+    // Update notification auto-clean enabled
+    updateNotifAutoClean: db.prepare('UPDATE settings SET notif_auto_clean = ? WHERE id = 1'),
+    // Update notification auto-clean frequency (in seconds)
+    updateNotifAutoCleanFreq: db.prepare('UPDATE settings SET notif_auto_clean_freq = ? WHERE id = 1')
 };
 
 // Initialize settings on startup
@@ -1478,6 +1536,21 @@ module.exports = {
         updateLanguage: (language, userId) => userQueries.updateLanguage.run(language, userId),
         updateCustomEmoji: (setId, userId) => userQueries.updateCustomEmoji.run(setId, userId),
         getUsersByCustomEmoji: (setId) => userQueries.getUsersByCustomEmoji.all(setId)
+    },
+    notifMessageQueries: {
+        addMessage: (notificationId, channelId, messageId, triggerTime, sentAt) =>
+            notifMessageQueries.addMessage.run(notificationId, channelId, messageId, triggerTime, sentAt),
+        getMessagesByTriggerTime: (triggerTime) => notifMessageQueries.getMessagesByTriggerTime.all(triggerTime),
+        deleteMessage: (id) => notifMessageQueries.deleteMessage.run(id),
+        deleteByNotification: (notificationId) => notifMessageQueries.deleteByNotification.run(notificationId),
+        deleteOlderThan: (triggerTime) => notifMessageQueries.deleteOlderThan.run(triggerTime)
+    },
+    notifAutoCleanQueries: {
+        addChannel: (channelId) => notifAutoCleanQueries.addChannel.run(channelId),
+        removeChannel: (channelId) => notifAutoCleanQueries.removeChannel.run(channelId),
+        getChannel: (channelId) => notifAutoCleanQueries.getChannel.get(channelId),
+        getAllChannels: () => notifAutoCleanQueries.getAllChannels.all(),
+        clearAll: () => notifAutoCleanQueries.clearAll.run()
     },
     getCurrentTimestamp
 };

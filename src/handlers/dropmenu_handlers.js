@@ -25,6 +25,7 @@ const notificationMentions = require('../functions/Notification/notificationMent
 const notificationFields = require('../functions/Notification/notificationFields');
 const notificationSettings = require('../functions/Notification/notificationSettings');
 const shareNotification = require('../functions/Notification/shareNotification');
+const notifAutoClean = require('../functions/Notification/autoClean');
 const scheduleView = require('../functions/Notification/scheduleView');
 const emojisActivate = require('../functions/Settings/theme/emojisActivate');
 const emojisEdit = require('../functions/Settings/theme/emojisEdit');
@@ -124,6 +125,9 @@ const dropdownHandlers = [
     { type: 'string', pattern: /^notification_delete_(?:server|private)_select_/, fn: deleteNotification.handleNotificationSelection },
     { type: 'string', pattern: /^notification_edit_select_/, fn: editNotification.handleNotificationSelection },
     { type: 'string', pattern: /^template_export_menu_/, fn: shareNotification.handleNotificationExportSelection },
+
+    // Notification auto-clean channel selection
+    { type: 'string', pattern: /^notif_ac_ch_select_/, fn: notifAutoClean.handleChannelSelectMenu },
 
     // Calculators
     { type: 'string', pattern: /^calc_bld_select_/, fn: buildings.handleBuildingSelect },

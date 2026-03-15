@@ -1141,14 +1141,18 @@
                 "scheduleViewField": {
                     "name": "- **Calendrier**",
                     "value": "  - Voir les notifications planifiées à venir"
+                },
+                "autoCleanField": {
+                    "name": "- **Nettoyage Auto**",
+                    "value": "  - Supprimer automatiquement les messages de notification après un délai défini"
                 }
             },
             "buttons": {
                 "createNotification": "Créer",
                 "deleteNotification": "Supprimer",
                 "editNotification": "Modifier",
-                "scheduleView": "Calendrier"
-                
+                "scheduleView": "Calendrier",
+                "autoClean": "Nettoyage Auto"
             }
         },
         "createNotification": {
@@ -1716,6 +1720,46 @@
                 "invalidDateFormat": "{emoji.1050} Format de date invalide. Utilisez JJ/MM/AAAA (ex., 25/12/2024)",
                 "invalidTimeFormat": "{emoji.1050} Format d'heure invalide. Utilisez HH:MM:SS (ex., 14:30:00)",
                 "invalidDateTime": "{emoji.1050} Date ou heure invalide. Vérifiez votre saisie."
+            }
+        },
+        "autoClean": {
+            "content": {
+                "title": "### {emoji.1022} Nettoyage Auto",
+                "description": "Supprimer automatiquement les messages de notification envoyés après un délai configuré.",
+                "statusEnabled": "- **Statut :** Activé",
+                "statusDisabled": "- **Statut :** Désactivé",
+                "frequency": "- **Supprimer après :** {frequency}",
+                "frequencyNotSet": "- **Supprimer après :** Non défini",
+                "channelsTitle": "### {emoji.1022} Canaux de Nettoyage Auto",
+                "channelsDescription": "Sélectionnez les canaux de notification dont les messages doivent être supprimés automatiquement.",
+                "noChannels": "Aucun canal de notification trouvé.",
+                "channelSelected": "{emoji.1004} <#{channelId}>",
+                "channelNotSelected": "{emoji.1051} <#{channelId}>"
+            },
+            "buttons": {
+                "channels": "Canaux",
+                "toggle": "Activer",
+                "toggleDisable": "Désactiver",
+                "frequency": "Fréquence"
+            },
+            "selectMenu": {
+                "placeholder": "Sélectionnez les canaux pour le nettoyage auto...",
+                "page": "Page {current}/{total}"
+            },
+            "modal": {
+                "title": "Fréquence de Nettoyage Auto",
+                "frequencyLabel": "Supprimer après (ex. 30m, 2h, 1j)",
+                "frequencyPlaceholder": "30m, 1h, 6h, 1j (max : 7j)"
+            },
+            "errors": {
+                "invalidFrequency": "{emoji.1050} Format de fréquence invalide. Utilisez des formats comme : 30m, 1h, 6h, 1j (max 7 jours).",
+                "frequencyTooLong": "{emoji.1050} La fréquence ne peut pas dépasser 7 jours."
+            },
+            "success": {
+                "channelsUpdated": "{emoji.1004} Canaux de nettoyage auto mis à jour.",
+                "enabled": "{emoji.1004} Nettoyage auto activé.",
+                "disabled": "{emoji.1004} Nettoyage auto désactivé.",
+                "frequencyUpdated": "{emoji.1004} Fréquence de nettoyage auto définie à {frequency}."
             }
         },
         "scheduleView": {
