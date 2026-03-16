@@ -320,8 +320,10 @@ class GiftCodeAPI {
 
                     // Find codes that are new to us (not in database)
                     const newCodesToValidate = [];
+                    const seenCodes = new Set();
                     for (const { code, date } of validCodes) {
-                        if (!dbCodes[code]) {
+                        if (!dbCodes[code] && !seenCodes.has(code)) {
+                            seenCodes.add(code);
                             newCodesToValidate.push({ code, date });
                         }
                     }
@@ -355,8 +357,6 @@ class GiftCodeAPI {
                                     // Get VIP status from validation result
                                     const isVipCode = validationResult.results?.[0]?.is_vip || false;
 
-                                    validCodesForAutoRedeem.push({ code, date, isVipCode });
-
                                     try {
                                         // addGiftCode(giftCode, status, addedBy, source, apiPushed, isVip)
                                         giftCodeQueries.addGiftCode(code, 'active', 'system', 'api', true, isVipCode);
@@ -364,12 +364,13 @@ class GiftCodeAPI {
                                         // Set last_validated timestamp to prevent re-validation by validateExistingCodes
                                         giftCodeQueries.updateLastValidated(code);
 
-                                        // VIP count is NOT incremented here anymore
-                                        // It will be incremented individually for each player that FAILS to redeem due to VIP restrictions
-                                        // This happens in handleVipTracking() during the redeem process
+                                        // Only push to auto-redeem array AFTER successful DB insert
+                                        // If DB insert fails (code already exists from channel/manual add),
+                                        // the other source handles auto-redeem — skip to prevent duplicates
+                                        validCodesForAutoRedeem.push({ code, date, isVipCode });
                                     } catch (dbError) {
-                                        console.error(`Error adding code ${code} to database:`, dbError);
-                                        continue; // Skip to next code if database add fails
+                                        console.error(`Code ${code} already exists in database, skipping auto-redeem`);
+                                        continue;
                                     }
 
                                 } else {

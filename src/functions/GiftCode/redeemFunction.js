@@ -11,7 +11,7 @@ const {
 } = require('../Processes/createProcesses');
 const { queueManager } = require('../Processes/queueManager');
 const { processExecutor } = require('../Processes/executeProcesses');
-const { systemLogQueries, giftCodeQueries, playerQueries, giftCodeUsageQueries, settingsQueries } = require('../utility/database');
+const { systemLogQueries, giftCodeQueries, playerQueries, giftCodeUsageQueries, settingsQueries, processQueries: processDbQueries } = require('../utility/database');
 const { getTestIdForValidation } = require('./setTestId');
 const { API_CONFIG } = require('../utility/apiConfig');
 const { encodeData, nativePost } = require('../utility/apiClient');
@@ -516,9 +516,32 @@ async function createRedeemProcess(redeemData, options = {}) {
 
         const adminId = providedAdminId || 'SYSTEM_AUTO_REDEEM';
 
+        // Duplicate process guard: skip if a queued/active redeem process already exists
+        // for the same alliance + gift code combination
+        const allianceIdForProcess = allianceContext?.id || 0;
+        const existingProcesses = processDbQueries.getProcessesByActionAndTarget('redeem_giftcode', String(allianceIdForProcess));
+        if (existingProcesses && existingProcesses.length > 0) {
+            const isDuplicate = existingProcesses.some(proc => {
+                try {
+                    const progress = JSON.parse(proc.progress);
+                    return progress?.redeemData?.giftCode === giftCode;
+                } catch {
+                    return false;
+                }
+            });
+
+            if (isDuplicate) {
+                return {
+                    success: true,
+                    processId: null,
+                    message: 'Duplicate process skipped — already queued or active for this alliance and gift code'
+                };
+            }
+        }
+
         const processResult = await createProcess({
             admin_id: adminId,
-            alliance_id: allianceContext?.id || 0, // Use 0 for system validation processes (no real alliance)
+            alliance_id: allianceIdForProcess,
             player_ids: identifiers.join(','),
             action: 'redeem_giftcode'
         });
