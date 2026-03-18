@@ -6,6 +6,8 @@ const { spawn, execSync } = require('child_process');
 
 // Auto-restart with optimization flags if not present
 if (!global.gc) {
+    // Detect --dev flag and propagate via environment variable
+    const isDevMode = process.argv.includes('--dev');
     function spawnChild() {
         const child = spawn('node', [
             '--expose-gc',
@@ -14,7 +16,7 @@ if (!global.gc) {
         ], {
             stdio: 'inherit',
             cwd: process.cwd(),
-            env: { ...process.env, WOS_SELF_UPDATE: '1' }
+            env: { ...process.env, FULL_SELF_UPDATE: '1', ...(isDevMode ? { WOSLAND_DEV_MODE: '1' } : {}) }
         });
 
         child.on('exit', (code) => {
@@ -504,7 +506,7 @@ async function applyUpdate() {
 
         // If starter.js itself was updated and parent supports self-update loop, exit with code 42 to trigger re-spawn
         if (stats.starterChanged) {
-            if (process.env.WOS_SELF_UPDATE === '1') {
+            if (process.env.FULL_SELF_UPDATE === '1') {
                 console.log('\n[UPDATE] starter.js was updated — restarting process to apply entry-point changes...');
                 setTimeout(() => process.exit(42), 500);
                 return {

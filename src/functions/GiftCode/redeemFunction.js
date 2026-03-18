@@ -21,12 +21,47 @@ const MODEL_CONFIG = {
     metadataPath: path.join(__dirname, '../../model/captcha_model_metadata.json')
 };
 
+const isDevMode = process.env.WOSLAND_DEV_MODE === '1';
+function devLog(...args) {
+    if (isDevMode) console.log('[DEV][redeem]', ...args);
+}
+
 // Update embed progress every N players processed (not a time interval)
 const EMBED_UPDATE_INTERVAL = 10;
 const PROGRESS_EMBED_COLOR = 0x3498db;
 const PROGRESS_EMBED_COLOR_COMPLETE = 0x2ecc71;
 const PROGRESS_EMBED_COLOR_FAILED = 0xe74c3c;
 const ABORTABLE_STATUSES = new Set(['USED', 'TIME ERROR', 'CDK NOT FOUND']);
+
+// Rate limit tracking — 30 requests per 60-second window per endpoint
+const RATE_LIMIT_WINDOW = 60000;
+const RATE_LIMIT_PER_WINDOW = 30;
+const RATE_LIMIT_SAFE_MARGIN = 2; // pre-emptively pause when remaining ≤ this
+
+/**
+ * Module-level rate limit tracker updated by captcha/redeem responses.
+ * Tracks remaining budget per endpoint and estimates window timing.
+ */
+const rateLimitState = {
+    captcha: RATE_LIMIT_PER_WINDOW,
+    redeem: RATE_LIMIT_PER_WINDOW,
+    windowStart: 0
+};
+
+/**
+ * Updates rate limit state from an API response.
+ * Detects window resets (remaining goes up) and resets the window timer.
+ * @param {'captcha'|'redeem'} endpoint - Which endpoint's counter to update
+ * @param {number|undefined} remaining - X-RateLimit-Remaining value from response
+ */
+function updateRateLimit(endpoint, remaining) {
+    if (remaining === undefined) return;
+    if (remaining > rateLimitState[endpoint]) {
+        // Window has reset — remaining went up
+        rateLimitState.windowStart = Date.now();
+    }
+    rateLimitState[endpoint] = remaining;
+}
 
 // Status arrays for cleaner comparisons
 const ALREADY_REDEEMED_STATUSES = ['RECEIVED', 'SAME TYPE EXCHANGE'];
@@ -78,7 +113,6 @@ const ERROR_CODE_TO_STATUS = {
 // and hanging completion promises.
 if (!global._wosRedeemModuleState) {
     global._wosRedeemModuleState = {
-        lastCaptchaFetchTime: 0,
         processCompletionResolvers: new Map()
     };
 }
@@ -127,6 +161,8 @@ class CaptchaSolver {
 
             const metadataContent = await fs.readFile(MODEL_CONFIG.metadataPath, 'utf8');
             this.metadata = JSON.parse(metadataContent);
+
+            devLog(`Model loaded — input: ${JSON.stringify(this.metadata.input_shape)}, classes: ${this.metadata.num_classes}, chars: ${this.metadata.chars}`);
 
             this.initialising = null; // Reset initializing flag
 
@@ -205,6 +241,8 @@ class CaptchaSolver {
 
         const avgConfidence = confidences.reduce((sum, value) => sum + value, 0) / confidences.length;
 
+        devLog(`CAPTCHA solved: "${predictedText}" (confidence: ${avgConfidence.toFixed(3)}, per-char: [${confidences.map(c => c.toFixed(2)).join(', ')}])`);
+
         return {
             text: predictedText,
             confidence: avgConfidence
@@ -270,8 +308,45 @@ function createErrorResult(status, message, giftCodeActive = false) {
 // postForm is aliased as nativePost in the import above
 const postForm = nativePost;
 
+/**
+ * Merges new Set-Cookie headers into an existing cookie string.
+ * Extracts name=value pairs from Set-Cookie headers and combines
+ * with any previously accumulated cookies (session reuse).
+ * @param {string} [existing] - Current cookie string (semicolon-separated)
+ * @param {string[]} [setCookies] - Array of Set-Cookie header values from response
+ * @returns {string} Merged cookie string for the Cookie header
+ */
+function mergeCookies(existing, setCookies) {
+    const cookieMap = new Map();
+
+    // Parse existing cookies
+    if (existing) {
+        for (const part of existing.split(';')) {
+            const trimmed = part.trim();
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+                cookieMap.set(trimmed.substring(0, eqIdx), trimmed);
+            }
+        }
+    }
+
+    // Parse Set-Cookie headers (take only name=value, ignore attributes)
+    if (setCookies) {
+        for (const sc of setCookies) {
+            const nameValue = sc.split(';')[0].trim();
+            const eqIdx = nameValue.indexOf('=');
+            if (eqIdx > 0) {
+                cookieMap.set(nameValue.substring(0, eqIdx), nameValue);
+            }
+        }
+    }
+
+    return Array.from(cookieMap.values()).join('; ');
+}
+
 async function authenticatePlayer(fid) {
     let lastError = null;
+    let sessionCookies = '';
 
     // Retry authentication up to 3 times
     for (let attempt = 1; attempt <= API_CONFIG.MAX_RETRIES; attempt++) {
@@ -282,22 +357,35 @@ async function authenticatePlayer(fid) {
                     fid: String(fid),
                     time: Math.floor(Date.now() / 1000).toString()
                 },
-                'Player authentication'
+                'Player authentication',
+                sessionCookies || undefined
             );
 
+            // Accumulate cookies from each response
+            if (response.cookies?.length) {
+                sessionCookies = mergeCookies(sessionCookies, response.cookies);
+            }
+
+            // Log rate limit headers
+            if (response.rateLimit?.limit !== undefined) {
+                devLog(`[RateLimit] AUTH FID ${fid}: ${response.rateLimit.remaining}/${response.rateLimit.limit} remaining`);
+            }
 
             // Check for success (case-insensitive)
             const msgLower = typeof response.data?.msg === 'string' ? response.data.msg.toLowerCase() : '';
             if (response.ok && response.data && msgLower === 'success' && response.data.data) {
+                devLog(`Auth OK — FID ${fid}, nickname: ${response.data.data.nickname}, stoveLv: ${response.data.data.stove_lv}`);
                 return {
                     stoveLv: response.data.data.stove_lv || 1,
-                    nickname: response.data.data.nickname || 'Unknown'
+                    nickname: response.data.data.nickname || 'Unknown',
+                    cookies: sessionCookies
                 };
             }
 
             // Rate limit detected - wait longer
             if (response.status === 429 || msgLower.includes('too frequent') || msgLower.includes('timeout')) {
                 lastError = `Rate limited (attempt ${attempt}/${API_CONFIG.MAX_RETRIES})`;
+                devLog(`Auth rate-limited for FID ${fid} (attempt ${attempt}/${API_CONFIG.MAX_RETRIES}) — waiting ${(API_CONFIG.RATE_LIMIT_DELAY/1000).toFixed(1)}s`);
                 await wait(API_CONFIG.RATE_LIMIT_DELAY);
                 continue;
             }
@@ -320,7 +408,7 @@ async function authenticatePlayer(fid) {
 
         } catch (error) {
             lastError = error.message;
-            // console.error(`Player auth exception for FID ${fid} (attempt ${attempt}/${API_CONFIG.MAX_RETRIES}):`, error.message);
+            devLog(`Auth exception for FID ${fid} (attempt ${attempt}/${API_CONFIG.MAX_RETRIES}): ${error.message}`);
             if (attempt < API_CONFIG.MAX_RETRIES) {
                 await wait(API_CONFIG.RETRY_DELAY);
             }
@@ -329,10 +417,11 @@ async function authenticatePlayer(fid) {
 
     // All retries exhausted
     console.error(`Player authentication failed for FID ${fid} after ${API_CONFIG.MAX_RETRIES} attempts. Last error: ${lastError}`);
+    devLog(`Auth FAILED — FID ${fid}, ${API_CONFIG.MAX_RETRIES} attempts exhausted, last: ${lastError}`);
     return { authFailed: true, message: lastError };
 }
 
-async function fetchCaptchaImage(fid) {
+async function fetchCaptchaImage(fid, cookies) {
     let response;
     try {
         response = await postForm(
@@ -342,41 +431,39 @@ async function fetchCaptchaImage(fid) {
                 time: Date.now().toString(),
                 init: '0'
             },
-            'Captcha fetch'
+            'Captcha fetch',
+            cookies || undefined
         );
     } catch (networkError) {
         // nativePost already retried, but if it ultimately throws we'll handle it here
         console.error('Captcha fetch request failed:', networkError.message);
+        devLog(`Captcha fetch FAILED for FID ${fid}: ${networkError.message}`);
         return { error: 'NETWORK_ERROR', authError: false };
     }
 
+    // Log rate limit headers
+    if (response.rateLimit?.limit !== undefined) {
+        devLog(`[RateLimit] CAPTCHA FID ${fid}: ${response.rateLimit.remaining}/${response.rateLimit.limit} remaining`);
+    }
+
+    // Update rate limit tracker for adaptive throttling
+    updateRateLimit('captcha', response.rateLimit?.remaining);
+
     // Handle HTTP 429 (rate limit) specifically before checking response structure
     if (response.status === 429) {
-        /*
-        console.warn(`Captcha API rate limited (HTTP 429) for FID ${fid}`, {
-            status: response.status,
-            ok: response.ok,
-            data: response.data,
-            raw: response.raw ? response.raw.substring(0, 500) : 'N/A' // Truncate raw response to prevent log spam
-        });
-        */
+        devLog(`Captcha fetch HTTP 429 for FID ${fid} — rate limited`);
         return { error: 'CAPTCHA GET TOO FREQUENT', authError: false };
     }
 
     if (!response.ok || !response.data || typeof response.data !== 'object') {
-        /*
-        console.error('Invalid captcha response structure:', {
-            ok: response.ok,
-            status: response.status,
-            dataType: typeof response.data,
-            data: response.data,
-            raw: response.raw ? response.raw.substring(0, 500) : 'N/A' // Include raw response for diagnosis
-        });
-        */
+        devLog(`Captcha fetch invalid response for FID ${fid}: ok=${response.ok}, status=${response.status}, dataType=${typeof response.data}`);
         return { error: 'INVALID_RESPONSE', authError: false };
     }
 
     const { data } = response;
+
+    // Merge cookies from captcha response for session continuity
+    const mergedCookies = mergeCookies(cookies, response.cookies);
 
     if (
         (data.msg === 'SUCCESS' || data.msg === 'success') &&
@@ -388,7 +475,7 @@ async function fetchCaptchaImage(fid) {
             : data.data.img;
 
         try {
-            return { buffer: Buffer.from(base64String, 'base64'), authError: false };
+            return { buffer: Buffer.from(base64String, 'base64'), authError: false, cookies: mergedCookies };
         } catch (error) {
             // console.error('Failed to decode captcha image:', error.message);
             return { error: 'DECODE_ERROR', authError: false };
@@ -511,8 +598,7 @@ async function createRedeemProcess(redeemData, options = {}) {
         const identifiersToProcess = itemsToProcess.map((item) => item.id || `validation_${item.index}`);
         const existingIdentifiers = identifiers.filter(id => !identifiersToProcess.includes(id));
 
-        // To-do: implement debug mode to turn on this logging
-        // console.log(`Pre-filter results: ${normalisedItems.length} total, ${itemsToProcess.length} to process, ${existingIdentifiers.length} already redeemed`);
+        devLog(`Pre-filter: ${normalisedItems.length} total, ${itemsToProcess.length} to process, ${existingIdentifiers.length} already redeemed, code: ${giftCode}`);
 
         const adminId = providedAdminId || 'SYSTEM_AUTO_REDEEM';
 
@@ -756,6 +842,12 @@ async function executeRedeemOperation(processId) {
             throw new Error('No redeem data found in process');
         }
 
+        devLog(`executeRedeemOperation started — processId: ${processId}, code: ${redeemContext.giftCode}, items: ${redeemContext.items.length}, alliance: ${redeemContext.alliance?.name || 'N/A'}`);
+
+        // Process-scoped dev logger with processId and alliance context
+        const allianceTag = redeemContext.alliance?.name || 'N/A';
+        const pLog = (...args) => devLog(`[P${processId}|${allianceTag}]`, ...args);
+
         // Handle case where all players are pre-filtered (itemsToProcess is empty)
         if (redeemContext.items.length === 0 && Array.isArray(progress.existing) && progress.existing.length > 0) {
 
@@ -864,6 +956,11 @@ async function executeRedeemOperation(processId) {
         let lastItemStatus = null;
         let processedCount = 0;
 
+        // Initialize rate limit tracking for this operation
+        rateLimitState.captcha = RATE_LIMIT_PER_WINDOW;
+        rateLimitState.redeem = RATE_LIMIT_PER_WINDOW;
+        rateLimitState.windowStart = Date.now();
+
         while (activeQueue.length > 0 || retryQueue.length > 0) {
             // Move ready retries back to active queue
             const now = Date.now();
@@ -878,6 +975,7 @@ async function executeRedeemOperation(processId) {
                 if (retryQueue.length > 0) {
                     const nextRetry = Math.min(...retryQueue.map(r => r.retryAfter));
                     const sleepTime = Math.max(100, nextRetry - Date.now());
+                    pLog(`All ${retryQueue.length} player(s) rate-limited — waiting ${(sleepTime/1000).toFixed(1)}s for next retry`);
                     await wait(sleepTime);
                 }
                 continue;
@@ -891,6 +989,7 @@ async function executeRedeemOperation(processId) {
             // Add API cooldown when transitioning from validation to redemption
             if (lastItemStatus === 'validation' && item.status === 'redeem') {
                 const VALIDATION_TO_REDEEM_COOLDOWN = 3000;
+                pLog(`Validation→Redeem transition — cooling down ${(VALIDATION_TO_REDEEM_COOLDOWN/1000).toFixed(1)}s`);
                 await wait(VALIDATION_TO_REDEEM_COOLDOWN);
             }
             lastItemStatus = item.status;
@@ -918,16 +1017,19 @@ async function executeRedeemOperation(processId) {
             // Rate limits don't increment cycle — they aren't the player's fault
             // (matches Python: cycle_for_next_retry = current_cycle_count for rate limits)
             if (outcome.rateLimited && cycle < API_CONFIG.MAX_RETRY_CYCLES) {
+                const retryDelay = outcome.retryDelay || API_CONFIG.RATE_LIMIT_DELAY;
+                pLog(`Player ${identifier} rate-limited — queued for retry in ${(retryDelay/1000).toFixed(1)}s (cycle ${cycle}/${API_CONFIG.MAX_RETRY_CYCLES})`);
                 retryQueue.push({
                     item,
                     cycle,
-                    retryAfter: Date.now() + (outcome.retryDelay || API_CONFIG.RATE_LIMIT_DELAY)
+                    retryAfter: Date.now() + retryDelay
                 });
                 continue;
             }
 
             // Captcha exhausted: retry with a cooldown (like Python's captcha cycle retry)
             if (outcome.captchaExhausted && cycle < API_CONFIG.MAX_RETRY_CYCLES) {
+                pLog(`Player ${identifier} captcha exhausted — queued for retry cycle ${cycle + 1}/${API_CONFIG.MAX_RETRY_CYCLES} in ${(API_CONFIG.CAPTCHA_CYCLE_COOLDOWN/1000).toFixed(1)}s`);
                 retryQueue.push({
                     item,
                     cycle: cycle + 1,
@@ -945,6 +1047,8 @@ async function executeRedeemOperation(processId) {
             };
 
             results.push(resultPayload);
+
+            pLog(`[${processedCount + 1}] ${item.status} — ${identifier}: ${outcome.status || 'NO_STATUS'} (success: ${outcome.success}, attempts: ${outcome.attempts || 1})`);
 
             // DYNAMIC VIP CODE DETECTION: Check if this is actually a VIP code
             if (item.status === 'redeem' && !vipCodeDetected && VIP_RESTRICTION_STATUSES.includes(outcome.status)) {
@@ -1084,19 +1188,26 @@ async function executeRedeemOperation(processId) {
                 }
             }
 
-            const updatedProgress = {
-                ...progress,
-                pending: current.pending,
-                done: current.done,
-                failed: current.failed,
-                existing: current.existing,
-                redeemResults: results,
-                lastProcessedId: lastProcessedIdentifier,
-                lastProcessedAt: Date.now(),
-                embedState
-            };
+            // Batch progress persistence: write every EMBED_UPDATE_INTERVAL players or on last item
+            const isLastItem = activeQueue.length === 0 && retryQueue.length === 0;
+            const shouldPersist = isLastItem ||
+                processedCount % EMBED_UPDATE_INTERVAL === 0;
 
-            await updateProcessProgress(processId, updatedProgress);
+            if (shouldPersist) {
+                const updatedProgress = {
+                    ...progress,
+                    pending: current.pending,
+                    done: current.done,
+                    failed: current.failed,
+                    existing: current.existing,
+                    redeemResults: results,
+                    lastProcessedId: lastProcessedIdentifier,
+                    lastProcessedAt: Date.now(),
+                    embedState
+                };
+
+                await updateProcessProgress(processId, updatedProgress);
+            }
 
             // Memory optimization: trigger GC hint periodically (every 50 players)
             if (processedCount > 0 && processedCount % 50 === 0 && global.gc) {
@@ -1118,18 +1229,33 @@ async function executeRedeemOperation(processId) {
                 break;
             }
 
-            // Add delay between redemptions (skip if no more active items to process)
+            // Adaptive rate-limit-aware delay between players
             const hasMoreActive = activeQueue.length > 0;
             if (item.status === 'redeem' && hasMoreActive) {
-                const processingEndTime = Date.now();
-                const elapsedTime = processingEndTime - processingStartTime;
+                const minRemaining = Math.min(rateLimitState.captcha, rateLimitState.redeem);
 
-                const targetDelay = API_CONFIG.MEMBER_PROCESS_DELAY_MIN +
-                    Math.random() * (API_CONFIG.MEMBER_PROCESS_DELAY_MAX - API_CONFIG.MEMBER_PROCESS_DELAY_MIN);
-                const remainingDelay = Math.max(0, targetDelay - elapsedTime);
-
-                if (remainingDelay > 0) {
-                    await wait(remainingDelay);
+                if (minRemaining <= RATE_LIMIT_SAFE_MARGIN) {
+                    // Budget is low — wait for the rate limit window to reset
+                    const elapsed = Date.now() - rateLimitState.windowStart;
+                    const windowRemaining = Math.max(0, RATE_LIMIT_WINDOW - elapsed + 1000); // +1s safety buffer
+                    if (windowRemaining > 0) {
+                        pLog(`[RateLimit] Budget low (captcha: ${rateLimitState.captcha}, redeem: ${rateLimitState.redeem}) — pausing ${(windowRemaining/1000).toFixed(1)}s for window reset`);
+                        await wait(windowRemaining);
+                    }
+                    // Reset tracker for fresh window
+                    rateLimitState.captcha = RATE_LIMIT_PER_WINDOW;
+                    rateLimitState.redeem = RATE_LIMIT_PER_WINDOW;
+                    rateLimitState.windowStart = Date.now();
+                } else {
+                    // Normal pacing delay
+                    const processingEndTime = Date.now();
+                    const elapsedTime = processingEndTime - processingStartTime;
+                    const targetDelay = API_CONFIG.MEMBER_PROCESS_DELAY_MIN +
+                        Math.random() * (API_CONFIG.MEMBER_PROCESS_DELAY_MAX - API_CONFIG.MEMBER_PROCESS_DELAY_MIN);
+                    const remainingDelay = Math.max(0, targetDelay - elapsedTime);
+                    if (remainingDelay > 0) {
+                        await wait(remainingDelay);
+                    }
                 }
             }
         }
@@ -1157,6 +1283,8 @@ async function executeRedeemOperation(processId) {
             success: !abortReason && results.every((entry) => entry.success),
             results
         };
+
+        pLog(`Finished — success: ${summary.success}, processed: ${results.length}, done: ${current.done.length}, failed: ${current.failed.length}, existing: ${current.existing.length}${abortReason ? `, aborted: ${abortReason}` : ''}`);
 
         if (embedState && !embedState.disabled) {
             const finalStats = computeRedeemStats(redeemContext, results, current);
@@ -1198,13 +1326,8 @@ async function executeRedeemOperation(processId) {
 
         resolveProcessCompletion(processId, summary);
 
-        // Memory optimization: Unload captcha model after completion
-        captchaSolver.unload();
-
-        // Trigger GC if available
-        if (global.gc) {
-            global.gc();
-        }
+        // Let the idle timer handle model unloading (2-min timeout in CaptchaSolver)
+        // No explicit unload — avoids costly reload when processing multiple alliances
 
         return summary;
 
@@ -1215,11 +1338,7 @@ async function executeRedeemOperation(processId) {
             error: error.message
         });
 
-        // Memory cleanup on error
-        captchaSolver.unload();
-        if (global.gc) {
-            global.gc();
-        }
+        // Let the idle timer handle model cleanup
 
         throw error;
     }
@@ -1287,8 +1406,7 @@ async function validateGiftCode(giftCode) {
  */
 async function redeemGiftCodeForPlayer(playerId, giftCode) {
     try {
-        // to-do: implement debug mode to turn on this logging
-        //console.log(`Redeeming gift code "${giftCode}" for player: ${playerId}`);
+        devLog(`Redeeming code "${giftCode}" for player ${playerId}`);
 
         // Make API call to redeem gift code
         const result = await makeGiftCodeAPIRequest(playerId, giftCode, 'redeem');
@@ -1350,6 +1468,9 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
     // This prevents duplicate authentication calls on each captcha retry
     let authInfo = await authenticatePlayer(fid);
 
+    // Capture session cookies from authentication for reuse
+    let sessionCookies = authInfo?.cookies || '';
+
     if (!authInfo || authInfo.authFailed || authInfo.playerNotExist) {
         // Check if this is a "player doesn't exist" case
         if (authInfo?.playerNotExist) {
@@ -1375,33 +1496,26 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
     while (attempt < API_CONFIG.MAX_CAPTCHA_ATTEMPTS) {
         attempt++;
 
-        // Rate limit captcha fetches to prevent API rate limit errors
-        // Ensure minimum delay between captcha fetch requests across all players
-        const now = Date.now();
-        const timeSinceLastFetch = now - moduleState.lastCaptchaFetchTime;
-        const minDelayBetweenFetches = API_CONFIG.BETWEEN_REDEMPTIONS_DELAY;
+        const captchaResult = await fetchCaptchaImage(fid, sessionCookies);
 
-        if (moduleState.lastCaptchaFetchTime > 0 && timeSinceLastFetch < minDelayBetweenFetches) {
-            const waitTime = minDelayBetweenFetches - timeSinceLastFetch;
-            await wait(waitTime);
+        // Update session cookies from captcha response
+        if (captchaResult?.cookies) {
+            sessionCookies = captchaResult.cookies;
         }
-
-        // Update last fetch time before fetching (not after) to prevent concurrent fetches
-        moduleState.lastCaptchaFetchTime = Date.now();
-
-        const captchaResult = await fetchCaptchaImage(fid);
 
         // Handle captcha fetch failure
         if (!captchaResult || !captchaResult.buffer) {
             // Check if this is an authentication error (session expired)
             if (captchaResult?.authError) {
                 authRetryCount++;
+                devLog(`Auth error on captcha fetch for FID ${fid} — re-authenticating (retry ${authRetryCount}/${MAX_AUTH_RETRIES})`);
                 if (authRetryCount > MAX_AUTH_RETRIES) {
                     return createErrorResult('MAX_AUTH_RETRIES', `Authentication keeps failing for FID ${fid}`, false);
                 }
 
-                // Re-authenticate player
+                // Re-authenticate player and refresh session cookies
                 authInfo = await authenticatePlayer(fid);
+                sessionCookies = authInfo?.cookies || '';
                 if (!authInfo || authInfo.authFailed || authInfo.playerNotExist) {
                     if (authInfo?.playerNotExist) {
                         return {
@@ -1441,6 +1555,7 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
             }
 
             // Other non-auth, non-rate-limit error, treat as normal retry
+            devLog(`Captcha fetch error for FID ${fid}: ${errorMsg} — retrying in ${(API_CONFIG.RETRY_DELAY/1000).toFixed(1)}s (attempt ${attempt}/${API_CONFIG.MAX_CAPTCHA_ATTEMPTS})`);
             lastResult = createErrorResult('CAPTCHA_FETCH_FAILED', 'Unable to fetch captcha image', false);
             await wait(API_CONFIG.RETRY_DELAY);
             continue;
@@ -1455,6 +1570,7 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
             solved = await captchaSolver.solve(captchaImage);
         } catch (error) {
             console.error('Captcha solving failed:', error.message);
+            devLog(`Captcha solve FAILED for FID ${fid}: ${error.message}`);
             lastResult = createErrorResult('CAPTCHA_SOLVE_FAILED', error.message, false);
 
             // Clean up captcha buffer to free memory
@@ -1475,12 +1591,22 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
                 captcha_code: solved.text,
                 time: Date.now().toString()
             },
-            'Gift code'
+            'Gift code',
+            sessionCookies || undefined
         );
+
+        // Log rate limit headers
+        if (response.rateLimit?.limit !== undefined) {
+            devLog(`[RateLimit] REDEEM FID ${fid}: ${response.rateLimit.remaining}/${response.rateLimit.limit} remaining`);
+        }
+
+        // Update rate limit tracker for adaptive throttling
+        updateRateLimit('redeem', response.rateLimit?.remaining);
 
         if (!response.ok || !response.data) {
             // HTTP 429: return immediately for retry queue instead of blocking
             if (response.status === 429) {
+                devLog(`Redeem HTTP 429 for FID ${fid} — returning to retry queue`);
                 return {
                     ...createErrorResult('HTTP_ERROR', 'HTTP 429 Too Many Requests', false),
                     rateLimited: true,
@@ -1489,6 +1615,7 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
                 };
             }
 
+            devLog(`Redeem HTTP error for FID ${fid}: status ${response.status} — retrying in ${(API_CONFIG.RETRY_DELAY/1000).toFixed(1)}s (attempt ${attempt}/${API_CONFIG.MAX_CAPTCHA_ATTEMPTS})`);
             lastResult = createErrorResult('HTTP_ERROR', `HTTP ${response.status}`, false);
 
             await wait(API_CONFIG.RETRY_DELAY);
@@ -1504,16 +1631,20 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
             attempts: attempt
         };
 
+        devLog(`API response — FID ${fid}, op: ${operation}, status: ${analysis.status}, success: ${analysis.success}, attempt: ${attempt}/${API_CONFIG.MAX_CAPTCHA_ATTEMPTS}`);
+
         // Clean up solved captcha data
         solved = null;
 
         if (analysis.retry?.type === 'captcha') {
+            devLog(`Captcha rejected for FID ${fid}: ${analysis.status} — re-solving (attempt ${attempt}/${API_CONFIG.MAX_CAPTCHA_ATTEMPTS})`);
             lastResult = result;
             await wait(API_CONFIG.RETRY_DELAY);
             continue;
         }
 
         if (analysis.retry?.type === 'rate') {
+            devLog(`Redeem rate-limited for FID ${fid}: ${analysis.status} — returning to retry queue`);
             // Return immediately for retry queue instead of blocking
             return {
                 ...result,
@@ -1531,12 +1662,9 @@ async function makeGiftCodeAPIRequest(fid, giftCode, operation) {
     const finalResult = lastResult || createErrorResult('MAX_ATTEMPTS_EXCEEDED', 'Maximum captcha attempts exceeded', false);
     finalResult.captchaExhausted = true;
     finalResult.attempts = attempt;
+    devLog(`All ${API_CONFIG.MAX_CAPTCHA_ATTEMPTS} captcha attempts exhausted for FID ${fid} — last status: ${finalResult.status}`);
 
-
-    // Force early captcha model unload on repeated failures
-    if (attempt >= API_CONFIG.MAX_CAPTCHA_ATTEMPTS || authRetryCount > MAX_AUTH_RETRIES) {
-        captchaSolver.unload();
-    }
+    // Idle timer in CaptchaSolver handles cleanup — no explicit unload needed
 
     return finalResult;
 }

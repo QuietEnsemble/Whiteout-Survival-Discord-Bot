@@ -515,17 +515,6 @@ async function resetCrashedProcesses() {
     try {
         const result = processQueries.resetCrashedProcesses();
 
-        if (result.changes > 0) {
-            systemLogQueries.addLog(
-                'recovery',
-                `Reset ${result.changes} crashed processes`,
-                JSON.stringify({
-                    resetCount: result.changes,
-                    function: 'resetCrashedProcesses'
-                })
-            );
-        }
-
         return result.changes;
 
     } catch (error) {

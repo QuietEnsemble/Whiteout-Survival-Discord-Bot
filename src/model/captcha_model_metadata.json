@@ -85,7 +85,6 @@
       0.5
     ]
   },
-  "best_validation_accuracy": 97.29125248508946,
-  "best_test_accuracy": 91.80,
-  "export_date": "2025-10-16 06:49:28"
+  "best_accuracy": 96.25994035785288,
+  "export_date": "2026-03-18 01:32:52"
 }

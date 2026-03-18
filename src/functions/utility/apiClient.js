@@ -12,6 +12,10 @@ const { API_CONFIG } = require('./apiConfig');
 const httpAgent = new http.Agent({ keepAlive: false });
 const httpsAgent = new https.Agent({ keepAlive: false });
 
+// Persistent agents for gift code API — reuses TCP+TLS connections across requests
+const giftCodeHttpAgent = new http.Agent({ keepAlive: true, maxSockets: 5, keepAliveMsecs: 30000 });
+const giftCodeHttpsAgent = new https.Agent({ keepAlive: true, maxSockets: 5, keepAliveMsecs: 30000 });
+
 // Browser profiles for header randomization
 const BROWSER_PROFILES = [
     {
@@ -144,29 +148,49 @@ async function fetchPost(url, body, origin = API_CONFIG.ORIGIN) {
  * @param {string} url - API endpoint URL
  * @param {Object} payload - Data to encode and send
  * @param {string} label - Label for error logging
- * @returns {Promise<{ok: boolean, status: number, data: Object, raw: string}>} Response
+ * @param {string} [cookies] - Optional cookie string to send with the request
+ * @returns {Promise<{ok: boolean, status: number, data: Object, raw: string, cookies: string[]}>} Response
  */
-async function nativePost(url, payload, label) {
+async function nativePost(url, payload, label, cookies) {
     return new Promise((resolve, reject) => {
         const postData = encodeData(payload);
 
         const urlObject = new URL(url);
         const browserHeaders = generateBrowserHeaders();
+        const isHttps = urlObject.protocol === 'https:';
+        const agent = isHttps ? giftCodeHttpsAgent : giftCodeHttpAgent;
+        const headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(postData),
+            ...browserHeaders
+        };
+
+        // Send cookies from previous responses (session reuse)
+        if (cookies) {
+            headers['Cookie'] = cookies;
+        }
+
         const options = {
             hostname: urlObject.hostname,
-            port: urlObject.port || (urlObject.protocol === 'https:' ? 443 : 80),
+            port: urlObject.port || (isHttps ? 443 : 80),
             path: urlObject.pathname,
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Content-Length': Buffer.byteLength(postData),
-                ...browserHeaders
-            }
+            agent,
+            headers
         };
 
         const client = urlObject.protocol === 'https:' ? https : http;
         const req = client.request(options, (res) => {
             let raw = '';
+
+            // Capture Set-Cookie headers for session reuse
+            const setCookies = res.headers['set-cookie'] || [];
+
+            // Capture rate limit headers for adaptive throttling
+            const rateLimit = {
+                limit: res.headers['x-ratelimit-limit'] ? parseInt(res.headers['x-ratelimit-limit'], 10) : undefined,
+                remaining: res.headers['x-ratelimit-remaining'] ? parseInt(res.headers['x-ratelimit-remaining'], 10) : undefined
+            };
 
             res.on('data', (chunk) => {
                 raw += chunk;
@@ -184,7 +208,9 @@ async function nativePost(url, payload, label) {
                     ok: res.statusCode >= 200 && res.statusCode < 300,
                     status: res.statusCode,
                     data,
-                    raw
+                    raw,
+                    cookies: setCookies,
+                    rateLimit
                 });
             });
         });
@@ -192,7 +218,9 @@ async function nativePost(url, payload, label) {
         // Destroy the socket and reject if the server hangs for more than 15 seconds
         req.setTimeout(15000, () => {
             req.destroy();
-            reject(new Error(`${label} request timed out after 15 seconds`));
+            const msg = `${label} request timed out after 15 seconds`;
+            console.warn(`[timeout] ${msg} — ${url}`);
+            reject(new Error(msg));
         });
 
         req.on('error', (error) => {

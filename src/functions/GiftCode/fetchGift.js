@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
+const http = require('http');
 const { EmbedBuilder } = require('discord.js');
-const { giftCodeQueries, adminQueries, allianceQueries, playerQueries, systemLogQueries } = require('../utility/database');
+const { giftCodeQueries, giftCodeChannelQueries, adminQueries, allianceQueries, playerQueries, systemLogQueries } = require('../utility/database');
 const { createRedeemProcess } = require('./redeemFunction');
 const languages = require('../../i18n');
 const { getUserInfo, handleError } = require('../utility/commonFunctions');
@@ -16,6 +17,13 @@ class GiftCodeAPI {
         this.bot = bot;
         this.apiUrl = GIFT_CODE_API_CONFIG.API_URL;
         this.apiKey = GIFT_CODE_API_CONFIG.API_KEY;
+
+        // Keep-alive HTTP agent for connection pooling
+        this.httpAgent = new http.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 30000,
+            maxSockets: 4
+        });
 
         // Random 5-10min check interval to help reduce API load
         this.minCheckInterval = 300000; // 5 minutes in ms
@@ -232,7 +240,8 @@ class GiftCodeAPI {
             try {
                 const response = await fetch(this.apiUrl, {
                     method: 'GET',
-                    headers: headers
+                    headers: headers,
+                    agent: this.httpAgent
                 });
 
                 const responseText = await response.text();
@@ -302,7 +311,8 @@ class GiftCodeAPI {
                                 const deleteResponse = await fetch(this.apiUrl, {
                                     method: 'DELETE',
                                     headers: headers,
-                                    body: JSON.stringify({ code })
+                                    body: JSON.stringify({ code }),
+                                    agent: this.httpAgent
                                 });
 
                                 if (deleteResponse.status !== 200) {
@@ -337,17 +347,30 @@ class GiftCodeAPI {
 
                         for (const { code, date } of newCodesToValidate) {
                             try {
-                                // Validate the gift code using process system (same as addGift.js)
+                                // Validate the gift code with retry logic for inconclusive results
+                                let validationResult = null;
+                                const MAX_VALIDATION_RETRIES = 3;
 
-                                const validationResult = await createRedeemProcess([
-                                    {
-                                        id: null,
-                                        giftCode: code,
-                                        status: 'validation'
+                                for (let attempt = 1; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
+                                    validationResult = await createRedeemProcess([
+                                        {
+                                            id: null,
+                                            giftCode: code,
+                                            status: 'validation'
+                                        }
+                                    ], {
+                                        adminId: 'SYSTEM_API_SYNC'
+                                    });
+
+                                    // If we got a definitive answer, stop retrying
+                                    if (validationResult?.success) break;
+
+                                    // Inconclusive — retry after delay
+                                    if (attempt < MAX_VALIDATION_RETRIES) {
+                                        console.warn(`Validation inconclusive for code ${code} (attempt ${attempt}/${MAX_VALIDATION_RETRIES}), retrying...`);
+                                        await this.sleep(5000);
                                     }
-                                ], {
-                                    adminId: 'SYSTEM_API_SYNC'
-                                });
+                                }
 
                                 // Check giftCodeActive instead of success
                                 // success=true just means we got a definitive answer (including TIME ERROR, USED, etc.)
@@ -403,40 +426,26 @@ class GiftCodeAPI {
                             }
                         }
 
-                        // PHASE 2: Create auto-redeem processes for ALL valid codes across ALL alliances
-                        // This happens AFTER all validation completes to prevent preemption issues
+                        // PHASE 2: Notify and auto-redeem valid codes
                         if (validCodesForAutoRedeem.length > 0) {
+                            // Notify owner admins and gift code channels IMMEDIATELY (before auto-redeem)
+                            await this.notifyNewCodes(validCodesForAutoRedeem);
+
                             const autoRedeemAlliances = allianceQueries.getAlliancesWithAutoRedeem();
 
-                            // Create ALL processes in parallel (non-blocking)
-                            const processCreationPromises = [];
-
+                            // Create processes SEQUENTIALLY so the queue system properly
+                            // queues them (first = ACTIVE, rest = QUEUED).
+                            // Parallel creation causes a race condition where all processes
+                            // see activeProcesses=[] and all start executing concurrently.
                             for (const { code, date, isVipCode } of validCodesForAutoRedeem) {
                                 for (const alliance of autoRedeemAlliances) {
-                                    processCreationPromises.push({
-                                        code,
-                                        allianceId: alliance.id,
-                                        allianceName: alliance.name,
-                                        promise: this.createAutoRedeemProcessForCodeAndAlliance(code, alliance, isVipCode)
-                                    });
+                                    try {
+                                        await this.createAutoRedeemProcessForCodeAndAlliance(code, alliance, isVipCode);
+                                    } catch (error) {
+                                        handleError(null, null, error, `autoRedeemProcessCreation_${code}_${alliance.id}`, false);
+                                    }
                                 }
                             }
-
-                            // Wait for ALL processes to finish (don't fail fast) and log per-alliance failures
-                            const creationResults = await Promise.allSettled(processCreationPromises.map(p => p.promise));
-
-                            creationResults.forEach((result, idx) => {
-                                const { code, allianceId, allianceName } = processCreationPromises[idx];
-                                if (result.status === 'rejected') {
-                                    handleError(null, null, result.reason, `autoRedeemProcessCreation_${code}_${allianceId}`, false);
-                                } else if (result.value === null) {
-                                    // Null indicates no eligible players or other early exit; log for visibility
-                                    // console.warn(`Auto-redeem process not created for code ${code} in alliance ${allianceName} (${allianceId}) - no eligible players or skipped.`);
-                                }
-                            });
-
-                            // Notify owner admins about VALID codes only (if bot is ready)
-                            await this.notifyOwnerAdmins(validCodesForAutoRedeem);
                         }
                     }
 
@@ -482,7 +491,8 @@ class GiftCodeAPI {
                                     body: JSON.stringify({
                                         code: code,
                                         date: formattedDate
-                                    })
+                                    }),
+                                    agent: this.httpAgent
                                 });
 
                                 if (postResponse.status === 409 || postResponse.status === 200) {
@@ -551,7 +561,8 @@ class GiftCodeAPI {
                     body: JSON.stringify({
                         code: giftcode,
                         date: dateStr
-                    })
+                    }),
+                    agent: this.httpAgent
                 });
 
                 const responseText = await response.text();
@@ -628,7 +639,8 @@ class GiftCodeAPI {
                 const response = await fetch(this.apiUrl, {
                     method: 'DELETE',
                     headers: headers,
-                    body: JSON.stringify({ code: giftcode })
+                    body: JSON.stringify({ code: giftcode }),
+                    agent: this.httpAgent
                 });
 
                 const responseText = await response.text();
@@ -677,7 +689,7 @@ class GiftCodeAPI {
             try {
                 const response = await fetch(
                     `${this.apiUrl}?action=check&giftcode=${encodeURIComponent(giftcode)}`,
-                    { method: 'GET', headers: headers }
+                    { method: 'GET', headers: headers, agent: this.httpAgent }
                 );
 
                 if (response.status === 200) {
@@ -757,11 +769,11 @@ class GiftCodeAPI {
         }
     }
     /**
-     * Sends DM notifications to owner admins about newly discovered valid gift codes.
+     * Sends notifications about newly discovered valid gift codes to owner admins (DM) and gift code channels.
      * Retries once after a delay if the bot is not ready on the first attempt.
      * @param {Array<{code: string, date: string}>} validCodes - Valid codes to notify about
      */
-    async notifyOwnerAdmins(validCodes) {
+    async notifyNewCodes(validCodes) {
         if (!validCodes || validCodes.length === 0) return;
 
         const MAX_ATTEMPTS = 2;
@@ -769,20 +781,20 @@ class GiftCodeAPI {
 
         for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             if (!this.bot.isReady()) {
-                console.warn(`[GiftCodeAPI] Bot not ready for DM notifications (attempt ${attempt}/${MAX_ATTEMPTS})`);
+                console.warn(`[GiftCodeAPI] Bot not ready for notifications (attempt ${attempt}/${MAX_ATTEMPTS})`);
                 if (attempt < MAX_ATTEMPTS) {
                     await this.sleep(RETRY_DELAY_MS);
                     continue;
                 }
-                console.warn(`[GiftCodeAPI] Skipping DM notifications — bot not ready after ${MAX_ATTEMPTS} attempts. Codes: ${validCodes.map(c => c.code).join(', ')}`);
+                console.warn(`[GiftCodeAPI] Skipping notifications — bot not ready after ${MAX_ATTEMPTS} attempts. Codes: ${validCodes.map(c => c.code).join(', ')}`);
                 return;
             }
 
+            const autoRedeemCount = allianceQueries.getAlliancesWithAutoRedeem().length;
+
+            // --- Owner admin DMs ---
             const allAdmins = adminQueries.getAllAdmins();
             const ownerAdmins = allAdmins.filter(admin => admin.is_owner === 1);
-            if (ownerAdmins.length === 0) return;
-
-            const autoRedeemCount = allianceQueries.getAlliancesWithAutoRedeem().length;
 
             for (const admin of ownerAdmins) {
                 const { lang } = getUserInfo(admin.user_id);
@@ -819,6 +831,52 @@ class GiftCodeAPI {
                 } catch (error) {
                     await handleError(null, null, error, `sendAdminNotification_${admin.user_id}`, false);
                 }
+            }
+
+            // --- Gift code channel notifications ---
+            try {
+                const giftChannels = giftCodeChannelQueries.getAllChannels();
+                if (giftChannels && giftChannels.length > 0) {
+                    // Use English for channel embeds (public channels, no per-user lang)
+                    const enLang = languages['en'] || languages[Object.keys(languages)[0]];
+
+                    for (const { code, date } of validCodes) {
+                        const channelEmbed = new EmbedBuilder()
+                            .setTitle(enLang.giftCode.apiGiftCode.content.title)
+                            .setFields({
+                                name: enLang.giftCode.apiGiftCode.content.giftCodeDetailsField.name,
+                                value: enLang.giftCode.apiGiftCode.content.giftCodeDetailsField.value
+                                    .replace('{giftCode}', code)
+                                    .replace('{date}', date)
+                                    .replace('{source}', enLang.giftCode.apiGiftCode.content.sourceAPI)
+                                    .replace('{time}', `<t:${Math.floor(Date.now() / 1000)}:R>`)
+                            })
+                            .setColor('#2ecc71')
+                            .setFooter({ text: 'Retrieved via API' });
+
+                        if (autoRedeemCount > 0) {
+                            channelEmbed.addFields({
+                                name: enLang.giftCode.apiGiftCode.content.autoRedeem,
+                                value: enLang.giftCode.apiGiftCode.content.autoRedeemValue
+                                    .replace('{count}', autoRedeemCount)
+                            });
+                        }
+
+                        for (const channelData of giftChannels) {
+                            try {
+                                const channel = this.bot.channels.cache.get(channelData.channel_id)
+                                    || await this.bot.channels.fetch(channelData.channel_id).catch(() => null);
+                                if (channel) {
+                                    await channel.send({ embeds: [channelEmbed] });
+                                }
+                            } catch (channelError) {
+                                console.warn(`[GiftCodeAPI] Failed to send notification to channel ${channelData.channel_id}: ${channelError.message}`);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                await handleError(null, null, error, 'notifyGiftCodeChannels', false);
             }
 
             return; // Success — don't retry
