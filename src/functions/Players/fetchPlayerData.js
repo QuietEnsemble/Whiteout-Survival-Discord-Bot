@@ -620,7 +620,7 @@ class PlayerDataProcessor {
             if (existing.length > 0) {
                 const displayedExisting = existing.slice(0, 10);
                 const existingList = displayedExisting
-                    .map(p => lang.players.addPlayer.content.alreadyExistField.value.replace('{nickname}', p.nickname).replace('{id}', p.fid))
+                    .map(p => lang.players.addPlayer.content.alreadyExistField.value.replace('{nickname}', p.nickname).replace('{id}', p.fid).replace('{furnace}', getFurnaceReadable(p.furnace_level, lang)).replace('{state}', p.state))
                     .join('\n');
 
                 let existingValue = existingList;
@@ -630,7 +630,7 @@ class PlayerDataProcessor {
 
                 embed.addFields([
                     {
-                        name: lang.players.addPlayer.content.alreadyExistField.name,
+                        name: lang.players.addPlayer.content.alreadyExistField.name.replace,
                         value: existingValue.length > 1024 ? existingValue.substring(0, 1020) + '...' : existingValue,
                     }
                 ]);
