@@ -54,6 +54,7 @@ const EMOJI_DEFINITIONS = [
     { key: 1050, name: 'warning', fallback: '⚠️' },
     { key: 1051, name: 'wrongMark', fallback: '❌' },
     { key: 1052, name: 'noBell', fallback: '🔕' },
+    { key: 1053, name: 'krFlag', fallback: '🇰🇷' },
 ];
 
 // Build fallback lookup map from definitions (supports both key and name lookup)
