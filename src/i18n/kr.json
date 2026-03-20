@@ -140,24 +140,24 @@
 		"editAlliance": {
 			"content": {
 				"title": {
-					"base": "### {emoji.1008} Edit Alliance",
-					"updated": "### {emoji.1004} Alliance Updated"
+					"base": "### {emoji.1008} 동맹 편집",
+					"updated": "### {emoji.1004} 동맹 업데이트됨"
 				},
-				"description": "Alliance information has been updated successfully.",
+				"description": "동맹 정보가 성공적으로 업데이트되었습니다.",
 				"allianceInfoField": {
-					"name": "- **Updated Information**",
-					"value": "  - **Name:** {name}\n  - **Refresh Rate:** {refreshRate}\n  - **Channel:** {channel}\n  - **Priority:** {priority}"
+					"name": "- **업데이트된 정보**",
+					"value": "  - **이름:** {name}\n  - **주사율:** {refreshRate}\n  - **특성을 보이다:** {channel}\n  - **우선 사항:** {priority}"
 				},
 				"warningField": {
-					"name": "- **Warning**",
-					"value": "  - Refresh rates less than 30 minutes are not recommended and may cause performance issues."
+					"name": "- **경고**",
+					"value": "  - 30분 미만의 새로 고침 속도는 권장되지 않으며 성능 문제를 유발할 수 있습니다."
 				},
-				"footer": "-# Select a channel for this alliance if you want to change it. If not, ignore this step.",
+				"footer": "-# 이 동맹의 채널을 변경하려면 선택하세요. 변경하지 않으려면 이 단계를 무시하세요.",
 				"disabled": "Disabled",
 				"minutes": "minutes"
 			},
 			"modal": {
-				"title": "Edit Alliance",
+				"title": "동맹 편집",
 				"allianceName": {
 					"label": "Alliance Name",
 					"placeholder": "Enter new alliance name"
