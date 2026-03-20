@@ -158,6 +158,9 @@ class ProcessRecovery {
                 await this.recoverActiveProcess(process);
             }
 
+            // Kick-start the queue: if no process is active, start the next queued one
+            await queueManager.startNextProcess();
+
         } catch (error) {
             await handleError(null, null, error, 'recoverProcesses function', false);
         } finally {
@@ -176,6 +179,19 @@ class ProcessRecovery {
             if (process.action === 'auto_refresh') {
                 await this.handleCrashedAutoRefresh(process);
                 return false; // No confirmation needed
+            }
+
+            // Special handling for validation-only redeem processes (no confirmation needed)
+            // These are lightweight single-code checks created by SYSTEM_API_SYNC.
+            // The completion promise is lost after a crash, so just mark them completed.
+            if (process.action === 'redeem_giftcode') {
+                const progress = process.progress || {};
+                const items = progress.redeemData?.items || [];
+                const isValidationOnly = items.length > 0 && items.every(item => item.status === 'validation');
+                if (isValidationOnly) {
+                    await updateProcessStatus(process.id, PROCESS_STATUS.COMPLETED);
+                    return false; // No confirmation needed
+                }
             }
 
             // Check if process has pending work

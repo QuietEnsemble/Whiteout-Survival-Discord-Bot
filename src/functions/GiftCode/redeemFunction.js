@@ -465,11 +465,17 @@ async function fetchCaptchaImage(fid, cookies) {
     // Merge cookies from captcha response for session continuity
     const mergedCookies = mergeCookies(cookies, response.cookies);
 
-    if (
-        (data.msg === 'SUCCESS' || data.msg === 'success') &&
-        data.data &&
-        typeof data.data.img === 'string'
-    ) {
+    // Check for explicit rate-limit error FIRST (matches Python: code==1 && msg=="CAPTCHA GET TOO FREQUENT.")
+    // The API uses code=1 to signal an error; only treat as rate-limited when BOTH code and msg match.
+    const msgStr = typeof data.msg === 'string' ? data.msg : '';
+    const msgUpper = msgStr.toUpperCase().replace(/[.\s]+$/g, '');
+    if (data.code === 1 && msgUpper === 'CAPTCHA GET TOO FREQUENT') {
+        devLog(`Captcha fetch rate-limited (code=1) for FID ${fid}: ${data.msg}`);
+        return { error: 'CAPTCHA GET TOO FREQUENT', authError: false };
+    }
+
+    // Check for captcha image data regardless of msg value (matches Python: checks data.data.img existence)
+    if (data.data && typeof data.data.img === 'string') {
         const base64String = data.data.img.startsWith('data:')
             ? data.data.img.split(',')[1]
             : data.data.img;
@@ -477,23 +483,15 @@ async function fetchCaptchaImage(fid, cookies) {
         try {
             return { buffer: Buffer.from(base64String, 'base64'), authError: false, cookies: mergedCookies };
         } catch (error) {
-            // console.error('Failed to decode captcha image:', error.message);
             return { error: 'DECODE_ERROR', authError: false };
         }
     }
 
-    // Check if this is an authentication error using the status map
+    // No image data found — check msg for known error statuses
     // NOT LOGIN and SIGN ERROR are both mapped as captcha-retry types
+    devLog(`Captcha fetch no image data for FID ${fid}: msg=${data.msg}, code=${data.code}, err_code=${data.err_code}`);
     const captchaFetchStatusConfig = getStatusConfig(data.msg);
     const isAuthError = captchaFetchStatusConfig?.retry?.type === 'captcha';
-
-    /*
-    console.error('Captcha fetch failed:', {
-        msg: data.msg,
-        errCode: data.err_code,
-        authError: isAuthError
-    });
-    */
 
     return { error: data.msg || 'UNKNOWN_ERROR', authError: isAuthError };
 }
