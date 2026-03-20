@@ -287,6 +287,12 @@ function getAvailableLanguages(userId) {
             emoji: emojiMap['1010'] || '🇫🇷',
             description: 'French'
         },
+        {
+            label: '한국인',
+            value: 'kr',
+            emoji: emojiMap['1053'] || '🇰🇷',
+            description: 'Korean'
+        },
     ];
     return languageOptions;
 }
